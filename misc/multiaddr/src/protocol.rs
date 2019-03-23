@@ -15,6 +15,7 @@ use std::{
 };
 use unsigned_varint::{encode, decode};
 
+const BLUETOOTH: u32 = 802;     // TODO: link vs physical?
 const DCCP: u32 = 33;
 const DNS4: u32 = 54;
 const DNS6: u32 = 55;
@@ -22,6 +23,7 @@ const HTTP: u32 = 480;
 const HTTPS: u32 = 443;
 const IP4: u32 = 4;
 const IP6: u32 = 41;
+const L2CAP: u32 = 803;
 const P2P_WEBRTC_DIRECT: u32 = 276;
 const P2P_WEBRTC_STAR: u32 = 275;
 const P2P_WEBSOCKET_STAR: u32 = 479;
@@ -29,6 +31,7 @@ const MEMORY: u32 = 777;
 const ONION: u32 = 444;
 const P2P: u32 = 421;
 const P2P_CIRCUIT: u32 = 290;
+const RFCOMM: u32 = 804;
 const QUIC: u32 = 460;
 const SCTP: u32 = 132;
 const TCP: u32 = 6;
@@ -42,6 +45,8 @@ const WSS: u32 = 478;
 /// `Protocol` describes all possible multiaddress protocols.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Protocol<'a> {
+    // TODO: document whether big endian or little endian
+    Bluetooth([u8; 6]),
     Dccp(u16),
     Dns4(Cow<'a, str>),
     Dns6(Cow<'a, str>),
@@ -49,6 +54,7 @@ pub enum Protocol<'a> {
     Https,
     Ip4(Ipv4Addr),
     Ip6(Ipv6Addr),
+    L2cap(u16),
     P2pWebRtcDirect,
     P2pWebRtcStar,
     P2pWebSocketStar,
@@ -58,6 +64,7 @@ pub enum Protocol<'a> {
     P2p(Multihash),
     P2pCircuit,
     Quic,
+    Rfcomm(u8),
     Sctp(u16),
     Tcp(u16),
     Udp(u16),
@@ -144,6 +151,29 @@ impl<'a> Protocol<'a> {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 Ok(Protocol::Memory(s.parse()?))
             }
+            "bluetooth" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                let mut out = [0; 6];
+                {
+                    let mut bytes = s.split(':');
+                    let mut out_iter = out.iter_mut();
+                    for (byte, o) in bytes.by_ref().zip(out_iter.by_ref()) {
+                        *o = u8::from_str_radix(byte, 16).map_err(|_| Error::InvalidProtocolString)?;
+                    }
+                    if out_iter.next().is_some() || bytes.next().is_some() {
+                        return Err(Error::InvalidProtocolString)
+                    }
+                }
+                Ok(Protocol::Bluetooth(out))
+            }
+            "l2cap" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                Ok(Protocol::L2cap(s.parse()?))
+            }
+            "rfcomm" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                Ok(Protocol::Rfcomm(s.parse()?))
+            }
             _ => Err(Error::UnknownProtocolString)
         }
     }
@@ -159,6 +189,10 @@ impl<'a> Protocol<'a> {
         }
         let (id, input) = decode::u32(input)?;
         match id {
+            BLUETOOTH => {
+                let (data, rest) = split_at(6, input)?;
+                Ok((Protocol::Bluetooth([data[0], data[1], data[2], data[3], data[4], data[5]]), rest))
+            }
             DCCP => {
                 let (data, rest) = split_at(2, input)?;
                 let mut rdr = Cursor::new(data);
@@ -201,6 +235,12 @@ impl<'a> Protocol<'a> {
 
                 Ok((Protocol::Ip6(addr), rest))
             }
+            L2CAP => {
+                let (data, rest) = split_at(2, input)?;
+                let mut rdr = Cursor::new(data);
+                let num = rdr.read_u16::<BigEndian>()?;
+                Ok((Protocol::L2cap(num), rest))
+            }
             P2P_WEBRTC_DIRECT => Ok((Protocol::P2pWebRtcDirect, input)),
             P2P_WEBRTC_STAR => Ok((Protocol::P2pWebRtcStar, input)),
             P2P_WEBSOCKET_STAR => Ok((Protocol::P2pWebSocketStar, input)),
@@ -222,6 +262,11 @@ impl<'a> Protocol<'a> {
             }
             P2P_CIRCUIT => Ok((Protocol::P2pCircuit, input)),
             QUIC => Ok((Protocol::Quic, input)),
+            RFCOMM => {
+                let (data, rest) = split_at(1, input)?;
+                let mut rdr = Cursor::new(data);
+                Ok((Protocol::Rfcomm(data[0]), rest))
+            }
             SCTP => {
                 let (data, rest) = split_at(2, input)?;
                 let mut rdr = Cursor::new(data);
@@ -324,6 +369,18 @@ impl<'a> Protocol<'a> {
             Protocol::P2pWebRtcStar => w.write_all(encode::u32(P2P_WEBRTC_STAR, &mut buf))?,
             Protocol::P2pWebRtcDirect => w.write_all(encode::u32(P2P_WEBRTC_DIRECT, &mut buf))?,
             Protocol::P2pCircuit => w.write_all(encode::u32(P2P_CIRCUIT, &mut buf))?,
+            Protocol::Bluetooth(addr) => {
+                w.write_all(encode::u32(BLUETOOTH, &mut buf))?;
+                w.write_all(&addr[..])?
+            }
+            Protocol::L2cap(port) => {
+                w.write_all(encode::u32(L2CAP, &mut buf))?;
+                w.write_u16::<BigEndian>(*port)?
+            }
+            Protocol::Rfcomm(port) => {
+                w.write_all(encode::u32(RFCOMM, &mut buf))?;
+                w.write_all(&[*port])?
+            }
             Protocol::Memory(port) => {
                 w.write_all(encode::u32(MEMORY, &mut buf))?;
                 w.write_u64::<BigEndian>(*port)?
@@ -336,6 +393,7 @@ impl<'a> Protocol<'a> {
     pub fn acquire<'b>(self) -> Protocol<'b> {
         use self::Protocol::*;
         match self {
+            Bluetooth(a) => Bluetooth(a),
             Dccp(a) => Dccp(a),
             Dns4(cow) => Dns4(Cow::Owned(cow.into_owned())),
             Dns6(cow) => Dns6(Cow::Owned(cow.into_owned())),
@@ -343,6 +401,7 @@ impl<'a> Protocol<'a> {
             Https => Https,
             Ip4(a) => Ip4(a),
             Ip6(a) => Ip6(a),
+            L2cap(a) => L2cap(a),
             P2pWebRtcDirect => P2pWebRtcDirect,
             P2pWebRtcStar => P2pWebRtcStar,
             P2pWebSocketStar => P2pWebSocketStar,
@@ -351,6 +410,7 @@ impl<'a> Protocol<'a> {
             P2p(a) => P2p(a),
             P2pCircuit => P2pCircuit,
             Quic => Quic,
+            Rfcomm(a) => Rfcomm(a),
             Sctp(a) => Sctp(a),
             Tcp(a) => Tcp(a),
             Udp(a) => Udp(a),
@@ -367,6 +427,8 @@ impl<'a> fmt::Display for Protocol<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::Protocol::*;
         match self {
+            Bluetooth(addr) => write!(f, "/bluetooth/{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]),
             Dccp(port) => write!(f, "/dccp/{}", port),
             Dns4(s) => write!(f, "/dns4/{}", s),
             Dns6(s) => write!(f, "/dns6/{}", s),
@@ -374,6 +436,7 @@ impl<'a> fmt::Display for Protocol<'a> {
             Https => f.write_str("/https"),
             Ip4(addr) => write!(f, "/ip4/{}", addr),
             Ip6(addr) => write!(f, "/ip6/{}", addr),
+            L2cap(port) => write!(f, "/l2cap/{}", port),
             P2pWebRtcDirect => f.write_str("/p2p-webrtc-direct"),
             P2pWebRtcStar => f.write_str("/p2p-webrtc-star"),
             P2pWebSocketStar => f.write_str("/p2p-websocket-star"),
@@ -385,6 +448,7 @@ impl<'a> fmt::Display for Protocol<'a> {
             P2p(c) => write!(f, "/p2p/{}", bs58::encode(c.as_bytes()).into_string()),
             P2pCircuit => f.write_str("/p2p-circuit"),
             Quic => f.write_str("/quic"),
+            Rfcomm(port) => write!(f, "/rfcomm/{}", port),
             Sctp(port) => write!(f, "/sctp/{}", port),
             Tcp(port) => write!(f, "/tcp/{}", port),
             Udp(port) => write!(f, "/udp/{}", port),

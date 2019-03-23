@@ -162,6 +162,8 @@ pub use tokio_io;
 pub use tokio_codec;
 
 #[doc(inline)]
+pub use libp2p_bluetooth as bluetooth;
+#[doc(inline)]
 pub use libp2p_core as core;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]

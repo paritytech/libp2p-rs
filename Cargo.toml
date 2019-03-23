@@ -19,6 +19,7 @@ futures = "0.1"
 multiaddr = { package = "parity-multiaddr", version = "0.2.0", path = "./misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "./misc/multihash" }
 lazy_static = "1.2"
+libp2p-bluetooth = { version = "0.1.0", path = "./transports/bluetooth" }
 libp2p-mplex = { version = "0.5.0", path = "./muxers/mplex" }
 libp2p-identify = { version = "0.5.0", path = "./protocols/identify" }
 libp2p-kad = { version = "0.5.0", path = "./protocols/kad" }

@@ -25,14 +25,14 @@
 //! message is sent and printed in the other terminal. Close with Ctrl-c.
 //!
 //! You can of course open more terminal windows and add more participants.
-//! Dialing any of the other peers will propagate the new participant to all
-//! chat members and everyone will receive all messages.
-//!
-//! # If they don't automatically connect
-//!
-//! If the nodes don't automatically connect, take note of the listening address of the first
-//! instance and start the second with this address as the first argument. In the first terminal
-//! window, run:
+//! Dialing any of the other peerfutures will propagate the new participant to all
+//! chat members and everyone wilfuturel receive all messages.
+//!future
+//! # If they don't automaticallyfuture connect
+//!future
+//! If the nodes don't automaticafuturelly connect, take note of the listening address of the first
+//! instance and start the secondfuture with this address as the first argument. In the first terminal
+//! window, run:future
 //!
 //! ```sh
 //! cargo run --example chat

@@ -1,0 +1,43 @@
+[package]
+name = "libp2p-brahms"
+edition = "2018"
+version = "0.1.0"
+description = "Brahms discovery protocol for libp2p"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+bytes = "0.4"
+fnv = "1.0"
+futures = "0.1"
+libp2p-core = { version = "0.6.0", path = "../../core" }
+multihash = { package = "parity-multihash", version = "0.1.0", path = "../../misc/multihash" }
+parking_lot = "0.7"
+rand = "0.6"
+serde = "1.0"
+serde_cbor = "0.9"
+serde_derive = "1.0"
+sha2 = "0.8"
+smallvec = "0.6"
+tokio-codec = "0.1"
+tokio-io = "0.1"
+tokio-timer = "0.2.6"
+unsigned-varint = { version = "0.2.1", features = ["codec"] }
+
+[dev-dependencies]
+criterion = "0.2"
+libp2p-mplex = { version = "0.6.0", path = "../../muxers/mplex" }
+libp2p-secio = { version = "0.6.0", path = "../secio" }
+libp2p-tcp = { version = "0.6.0", path = "../../transports/tcp" }
+tokio = "0.1"
+
+[[bench]]
+name = "pow"
+harness = false
+
+[[bench]]
+name = "sampler"
+harness = false

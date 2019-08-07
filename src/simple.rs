@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
+use crate::protocols::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use bytes::Bytes;
 use futures::{future::FromErr, prelude::*};
 use std::{iter, io::Error as IoError, sync::Arc};

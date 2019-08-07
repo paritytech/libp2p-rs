@@ -39,7 +39,7 @@
 //! and begin pinging each other.
 
 use futures::{prelude::*, future};
-use libp2p::{ identity, PeerId, ping::{Ping, PingConfig}, Swarm };
+use libp2p::{identity, PeerId, protocols::ping::{Ping, PingConfig}, Swarm};
 use std::env;
 
 fn main() {

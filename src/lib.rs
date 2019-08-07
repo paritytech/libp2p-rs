@@ -47,7 +47,7 @@
 //! Example (Dialing a TCP/IP multi-address):
 //!
 //! ```rust
-//! use libp2p::{Multiaddr, Transport, tcp::TcpConfig};
+//! use libp2p::{Multiaddr, Transport, transport::tcp::TcpConfig};
 //! let tcp = TcpConfig::new();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
 //! let _conn = tcp.dial(addr);
@@ -86,7 +86,7 @@
 //!
 //! ```rust
 //! # #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-secio"))] {
-//! use libp2p::{Transport, tcp::TcpConfig, secio::SecioConfig, identity::Keypair};
+//! use libp2p::{Transport, transport::tcp::TcpConfig, encryption::secio::SecioConfig, identity::Keypair};
 //! let tcp = TcpConfig::new();
 //! let secio_upgrade = SecioConfig::new(Keypair::generate_ed25519());
 //! let tcp_secio = tcp.with_upgrade(secio_upgrade);
@@ -161,70 +161,120 @@ pub use multihash;
 pub use tokio_io;
 pub use tokio_codec;
 
-#[doc(inline)]
-pub use libp2p_core as core;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-#[doc(inline)]
-pub use libp2p_deflate as deflate;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-#[doc(inline)]
-pub use libp2p_dns as dns;
-#[doc(inline)]
-pub use libp2p_identify as identify;
-#[doc(inline)]
-pub use libp2p_kad as kad;
-#[doc(inline)]
-pub use libp2p_floodsub as floodsub;
-#[doc(inline)]
-pub use libp2p_mplex as mplex;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-#[doc(inline)]
-pub use libp2p_mdns as mdns;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-#[doc(inline)]
-pub use libp2p_noise as noise;
-#[doc(inline)]
-pub use libp2p_ping as ping;
-#[doc(inline)]
-pub use libp2p_plaintext as plaintext;
-#[doc(inline)]
-pub use libp2p_ratelimit as ratelimit;
-#[doc(inline)]
-pub use libp2p_secio as secio;
+/// We re-export libp2p-core for the `NetworkBehaviour` macro.
+#[doc(hidden)]
+pub use libp2p_core;
+
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-#[doc(inline)]
-pub use libp2p_tcp as tcp;
-#[doc(inline)]
-pub use libp2p_uds as uds;
-#[doc(inline)]
-pub use libp2p_wasm_ext as wasm_ext;
-#[cfg(all(feature = "libp2p-websocket", not(any(target_os = "emscripten", target_os = "unknown"))))]
-#[doc(inline)]
-pub use libp2p_websocket as websocket;
-#[doc(inline)]
-pub use libp2p_yamux as yamux;
 
+pub mod prelude {
+    //! A "prelude" containing common imports from libp2p.
+    //!
+    //! Just like the standard library's prelude, this module contains items commonly-imported when
+    //! using libp2p. Contrary to the standard library's prelude, however, you have to import it
+    //! manually:
+    //!
+    //! ```
+    //! use libp2p::prelude::*;
+    //! ```
+    //!
+    pub use crate::{PeerId, Multiaddr};
+    pub use crate::transport::{Transport as _, TransportExt as _};
+    pub use crate::protocols::upgrade::{InboundUpgradeExt as _, OutboundUpgradeExt as _};
+}
+
+pub mod encryption {
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[doc(inline)]
+    pub use libp2p_noise as noise;
+    #[doc(inline)]
+    pub use libp2p_plaintext as plaintext;
+    #[doc(inline)]
+    pub use libp2p_secio as secio;
+}
+
+pub mod protocols {
+    //! List of common protocols, and how to implement protocols.
+
+    #[doc(inline)]
+    pub use libp2p_core::upgrade;
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[doc(inline)]
+    pub use libp2p_deflate as deflate;
+    #[doc(inline)]
+    pub use libp2p_identify as identify;
+    #[doc(inline)]
+    pub use libp2p_kad as kad;
+    #[doc(inline)]
+    pub use libp2p_floodsub as floodsub;
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[doc(inline)]
+    pub use libp2p_mdns as mdns;
+    #[doc(inline)]
+    pub use libp2p_ping as ping;
+
+    pub use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess};
+    pub use libp2p_swarm::{KeepAlive, SwarmPollParameters};
+    pub use libp2p_core::upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt};
+    pub use crate::simple::SimpleProtocol;
+}
+
+pub mod muxing {
+    #[doc(inline)]
+    pub use libp2p_core::muxing as core;
+    #[doc(inline)]
+    pub use libp2p_mplex as mplex;
+    #[doc(inline)]
+    pub use libp2p_yamux as yamux;
+
+    pub use libp2p_core::muxing::StreamMuxer;
+    pub use libp2p_core::muxing::StreamMuxerBox;
+}
+
+pub mod transport {
+    #[doc(inline)]
+    pub use libp2p_core::transport as core;
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[doc(inline)]
+    pub use libp2p_dns as dns;
+    #[doc(inline)]
+    pub use libp2p_ratelimit as ratelimit;
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[doc(inline)]
+    pub use libp2p_tcp as tcp;
+    #[doc(inline)]
+    pub use libp2p_uds as uds;
+    #[doc(inline)]
+    pub use libp2p_wasm_ext as wasm_ext;
+    #[cfg(all(feature = "libp2p-websocket", not(any(target_os = "emscripten", target_os = "unknown"))))]
+    #[doc(inline)]
+    pub use libp2p_websocket as websocket;
+
+    #[doc(inline)]
+    pub mod bandwidth {
+        pub use crate::bandwidth::*;
+    }
+
+    pub use libp2p_core::transport::Transport;
+    pub use libp2p_core::transport::TransportError;
+    pub use libp2p_core::transport::ListenerEvent;
+    pub use libp2p_core::transport::OptionalTransport;
+    pub use libp2p_core::transport::boxed::Boxed;
+    pub use crate::transport_ext::TransportExt;
+}
+
+mod bandwidth;
+mod simple;
 mod transport_ext;
 
-pub mod bandwidth;
-pub mod simple;
-
-pub use self::core::{
-    identity,
-    PeerId,
-    Transport,
-    transport::TransportError,
-    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
-};
+pub use libp2p_core::{identity, PeerId, Transport};
 pub use libp2p_core_derive::NetworkBehaviour;
 pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
-pub use self::simple::SimpleProtocol;
-pub use self::swarm::Swarm;
-pub use self::transport_ext::TransportExt;
+pub use self::swarm::{Swarm, SwarmBuilder};
 
 use futures::prelude::*;
+use libp2p_core::upgrade::{InboundUpgradeExt as _, OutboundUpgradeExt as _};
 use std::{error, io, time::Duration};
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
@@ -232,7 +282,7 @@ use std::{error, io, time::Duration};
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 pub fn build_development_transport(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+    -> impl Transport<Output = (PeerId, impl muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
      build_tcp_ws_secio_mplex_yamux(keypair)
 }
@@ -244,19 +294,19 @@ pub fn build_development_transport(keypair: identity::Keypair)
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
 pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+    -> impl Transport<Output = (PeerId, impl muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
     CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(keypair))
+        .with_upgrade(encryption::secio::SecioConfig::new(keypair))
         .and_then(move |output, endpoint| {
             let peer_id = output.remote_key.into_peer_id();
             let peer_id2 = peer_id.clone();
-            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
+            let upgrade = protocols::upgrade::SelectUpgrade::new(muxing::yamux::Config::default(), muxing::mplex::MplexConfig::new())
                 // TODO: use a single `.map` instead of two maps
                 .map_inbound(move |muxer| (peer_id, muxer))
                 .map_outbound(move |muxer| (peer_id2, muxer));
-            core::upgrade::apply(output.stream, upgrade, endpoint)
-                .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
+            protocols::upgrade::apply(output.stream, upgrade, endpoint)
+                .map(|(id, muxer)| (id, muxing::StreamMuxerBox::new(muxer)))
         })
         .with_timeout(Duration::from_secs(20))
 }
@@ -272,11 +322,11 @@ struct CommonTransport {
 }
 
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-websocket"))]
-type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
+type InnerImplementation = transport::core::OrTransport<transport::dns::DnsConfig<transport::tcp::TcpConfig>, transport::websocket::WsConfig<transport::dns::DnsConfig<transport::tcp::TcpConfig>>>;
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), not(feature = "libp2p-websocket")))]
 type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
 #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-type InnerImplementation = core::transport::dummy::DummyTransport;
+type InnerImplementation = transport::core::dummy::DummyTransport;
 
 #[derive(Debug, Clone)]
 struct CommonTransportInner {
@@ -287,12 +337,12 @@ impl CommonTransport {
     /// Initializes the `CommonTransport`.
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     pub fn new() -> CommonTransport {
-        let tcp = tcp::TcpConfig::new().nodelay(true);
-        let transport = dns::DnsConfig::new(tcp);
+        let tcp = transport::tcp::TcpConfig::new().nodelay(true);
+        let transport = transport::dns::DnsConfig::new(tcp);
         #[cfg(feature = "libp2p-websocket")]
         let transport = {
             let trans_clone = transport.clone();
-            transport.or_transport(websocket::WsConfig::new(trans_clone))
+            transport.or_transport(transport::websocket::WsConfig::new(trans_clone))
         };
 
         CommonTransport {
@@ -303,7 +353,7 @@ impl CommonTransport {
     /// Initializes the `CommonTransport`.
     #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
     pub fn new() -> CommonTransport {
-        let inner = core::transport::dummy::DummyTransport::new();
+        let inner = transport::core::dummy::DummyTransport::new();
         CommonTransport {
             inner: CommonTransportInner { inner }
         }
@@ -317,11 +367,11 @@ impl Transport for CommonTransport {
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
         self.inner.inner.listen_on(addr)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
         self.inner.inner.dial(addr)
     }
 }

@@ -20,7 +20,7 @@
 
 //! Provides the `TransportExt` trait.
 
-use crate::{bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, ratelimit::RateLimited, Transport};
+use crate::{bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, transport::ratelimit::RateLimited, transport::Transport};
 use std::{io, sync::Arc, time::Duration};
 use tokio_executor::DefaultExecutor;
 
@@ -30,8 +30,7 @@ use tokio_executor::DefaultExecutor;
 /// # Example
 ///
 /// ```
-/// use libp2p::TransportExt;
-/// use libp2p::tcp::TcpConfig;
+/// use libp2p::transport::{TransportExt, tcp::TcpConfig};
 /// use std::time::Duration;
 ///
 /// let _transport = TcpConfig::new()

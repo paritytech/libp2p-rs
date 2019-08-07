@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, core::{Transport, transport::{ListenerEvent, TransportError}}};
+use crate::{Multiaddr, transport::{Transport, ListenerEvent, TransportError}};
 use futures::{prelude::*, try_ready};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;

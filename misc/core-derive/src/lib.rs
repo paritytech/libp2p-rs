@@ -46,16 +46,16 @@ fn build(ast: &DeriveInput) -> TokenStream {
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
-    let multiaddr = quote!{::libp2p::core::Multiaddr};
+    let multiaddr = quote!{::libp2p::Multiaddr};
     let trait_to_impl = quote!{::libp2p::swarm::NetworkBehaviour};
     let net_behv_event_proc = quote!{::libp2p::swarm::NetworkBehaviourEventProcess};
-    let either_ident = quote!{::libp2p::core::either::EitherOutput};
+    let either_ident = quote!{::libp2p::libp2p_core::either::EitherOutput};
     let network_behaviour_action = quote!{::libp2p::swarm::NetworkBehaviourAction};
     let into_protocols_handler = quote!{::libp2p::swarm::IntoProtocolsHandler};
     let protocols_handler = quote!{::libp2p::swarm::ProtocolsHandler};
     let into_proto_select_ident = quote!{::libp2p::swarm::IntoProtocolsHandlerSelect};
-    let peer_id = quote!{::libp2p::core::PeerId};
-    let connected_point = quote!{::libp2p::core::ConnectedPoint};
+    let peer_id = quote!{::libp2p::PeerId};
+    let connected_point = quote!{::libp2p::libp2p_core::ConnectedPoint};
 
     // Name of the type parameter that represents the substream.
     let substream_generic = {
@@ -89,8 +89,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     quote!{Self: #net_behv_event_proc<<#ty as #trait_to_impl>::OutEvent>},
                     quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler: #protocols_handler<Substream = #substream_generic>},
                     // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
-                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<#substream_generic>},
-                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<#substream_generic>},
+                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InboundProtocol: ::libp2p::protocols::upgrade::InboundUpgrade<#substream_generic>},
+                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutboundProtocol: ::libp2p::protocols::upgrade::OutboundUpgrade<#substream_generic>},
                 ]
             })
             .collect::<Vec<_>>();

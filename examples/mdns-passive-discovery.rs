@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p::mdns::service::{MdnsPacket, MdnsService};
+use libp2p::protocols::mdns::service::{MdnsPacket, MdnsService};
 use std::io;
 
 fn main() {

@@ -30,8 +30,8 @@ use libp2p::{
     identity,
     build_development_transport
 };
-use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent, GetClosestPeersError};
-use libp2p::kad::record::store::MemoryStore;
+use libp2p::protocols::kad::{Kademlia, KademliaConfig, KademliaEvent, GetClosestPeersError};
+use libp2p::protocols::kad::record::store::MemoryStore;
 use std::env;
 use std::time::Duration;
 

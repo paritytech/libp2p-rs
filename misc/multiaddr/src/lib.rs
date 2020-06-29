@@ -303,6 +303,37 @@ impl TryFrom<Vec<u8>> for Multiaddr {
     }
 }
 
+/// Collect all local host addresses and use the provided port number as listen port.
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+pub fn host_addresses(suffix: &[Protocol]) -> io::Result<Vec<(IpAddr, ipnet::IpNet, Multiaddr)>> {
+    use get_if_addrs::{get_if_addrs, IfAddr};
+    use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+    let mut addrs = Vec::new();
+    for iface in get_if_addrs()? {
+        let ip = iface.ip();
+        let mut ma = Multiaddr::from(ip);
+        for proto in suffix {
+            ma = ma.with(proto.clone())
+        }
+        let ipn = match iface.addr {
+            IfAddr::V4(ip4) => {
+                let prefix_len = (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();
+                let ipnet = Ipv4Net::new(ip4.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u32, so can not exceed 32");
+                IpNet::V4(ipnet)
+            }
+            IfAddr::V6(ip6) => {
+                let prefix_len = (!u128::from_be_bytes(ip6.netmask.octets())).leading_zeros();
+                let ipnet = Ipv6Net::new(ip6.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u128, so can not exceed 128");
+                IpNet::V6(ipnet)
+            }
+        };
+        addrs.push((ip, ipn, ma))
+    }
+    Ok(addrs)
+}
+
 impl TryFrom<String> for Multiaddr {
     type Error = Error;
 

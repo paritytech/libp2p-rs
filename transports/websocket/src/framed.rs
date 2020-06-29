@@ -309,7 +309,7 @@ where
                 let stream = self.tls_config.client.connect(&dns_name, stream)
                     .map_err(|e| {
                         debug!("TLS handshake with {} failed: {}", address, e);
-                        Error::Tls(tls::Error::from(e))
+                        Error::Tls(e.into())
                     })
                     .await?;
 

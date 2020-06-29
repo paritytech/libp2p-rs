@@ -211,6 +211,9 @@ pub use libp2p_ping as ping;
 #[cfg_attr(docsrs, doc(cfg(feature = "plaintext")))]
 #[doc(inline)]
 pub use libp2p_plaintext as plaintext;
+#[cfg(all(feature = "quic", not(any(target_os = "emscripten", target_os = "unknown"))))]
+#[doc(inline)]
+pub use libp2p_quic as quic;
 #[cfg(feature = "secio")]
 #[cfg_attr(docsrs, doc(cfg(feature = "secio")))]
 #[doc(inline)]

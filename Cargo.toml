@@ -23,6 +23,7 @@ default = [
     "ping",
     "plaintext",
     "pnet",
+    "quic",
     "secio",
     "secp256k1",
     "tcp-async-std",
@@ -43,6 +44,7 @@ noise = ["libp2p-noise"]
 ping = ["libp2p-ping"]
 plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
+quic = ["libp2p-quic"]
 secio = ["libp2p-secio"]
 tcp-async-std = ["libp2p-tcp", "libp2p-tcp/async-std"]
 tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
@@ -84,6 +86,7 @@ libp2p-deflate = { version = "0.19.2", path = "protocols/deflate", optional = tr
 libp2p-dns = { version = "0.19.0", path = "transports/dns", optional = true }
 libp2p-mdns = { version = "0.19.2", path = "protocols/mdns", optional = true }
 libp2p-tcp = { version = "0.19.2", path = "transports/tcp", optional = true }
+libp2p-quic = { version = "0.19.0", path = "transports/quic", optional = true }
 libp2p-websocket = { version = "0.20.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
@@ -110,8 +113,16 @@ members = [
     "protocols/secio",
     "swarm",
     "transports/dns",
+    "transports/quic",
     "transports/tcp",
     "transports/uds",
+    "transports/wasm-ext",
     "transports/websocket",
-    "transports/wasm-ext"
 ]
+
+[patch.crates-io]
+# TODO: waiting for a release
+rustls = { git = "https://github.com/ctz/rustls", rev = "cac66a8c184f3ef8510bb62b390f241c2760f51d" }
+# TODO: overwrite necessary because quinn-proto 0.6.1 is incompatible with the rustls overwrite above
+# TODO: UUUUUUUGHHHHHH
+quinn-proto = { git = "https://github.com/djc/quinn", rev = "6e9f7e8063926f8bdab56bbc1615277ff0bdece5" }

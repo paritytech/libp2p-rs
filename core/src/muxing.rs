@@ -90,6 +90,10 @@ pub trait StreamMuxer {
     /// Only the latest task that was used to call this method may be notified.
     ///
     /// An error can be generated if the connection has been closed.
+    ///
+    /// Polling for an inbound substream is guaranteed to be performed continuously for as long
+    /// as the [`StreamMuxer`] as a whole is alive, and can therefore be used to drive some
+    /// connection-wide background processing such as sending connection-wide PINGs/PONGs.
     fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>>;
 
     /// Opens a new outgoing substream, and produces the equivalent to a future that will be

@@ -1,0 +1,39 @@
+[package]
+name = "libp2p-quic"
+version = "0.19.2"
+authors = ["Parity Technologies <admin@parity.io>"]
+edition = "2018"
+license = "MIT"
+description = "A libp2p transport using QUIC"
+keywords = ["peer-to-peer", "libp2p", "quic", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+async-std = "^1.5.0"
+either = "1.5.3"
+env_logger = "0.7.1"
+futures = "0.3.4"
+futures-timer = "3.0.2"
+ipnet = "2.2.0"
+libp2p-core = { path = "../../core", version = "0.19.0" }
+log = "0.4.0"
+parking_lot = "0.10.0"
+quinn-proto = "0.6.1"
+rcgen = { version = "0.8.1", default-features = false }
+ring = "0.16.11"
+rustls = { version = "0.17.0", features = ["dangerous_configuration"] }
+thiserror = "1.0.15"
+untrusted = "0.7.0"
+webpki = "0.21.2"
+yasna = "0.3.1"
+tracing = "0.1.15"
+
+# TODO: RGMLRMLG fix that crate name
+[dependencies.x509-signature]
+version = "0.4.0"
+features = ["webpki", "rustls", "std"]
+
+[dev-dependencies]
+tracing = "0.1.15"
+tracing-core = "0.1.10"
+tracing-subscriber = "0.2.6"

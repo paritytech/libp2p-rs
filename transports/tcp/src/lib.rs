@@ -31,11 +31,10 @@
 
 use futures::{future::{self, Ready}, prelude::*};
 use futures_timer::Delay;
-use get_if_addrs::{IfAddr, get_if_addrs};
-use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use ipnet::IpNet;
 use libp2p_core::{
     Transport,
-    multiaddr::{Protocol, Multiaddr},
+    multiaddr::{Protocol, Multiaddr, host_addresses},
     transport::{ListenerEvent, TransportError}
 };
 use log::{debug, trace};
@@ -44,7 +43,6 @@ use std::{
     collections::VecDeque,
     convert::TryFrom,
     io,
-    iter::{self, FromIterator},
     net::{IpAddr, SocketAddr},
     pin::Pin,
     task::{Context, Poll},
@@ -134,11 +132,11 @@ impl Transport for $tcp_config {
             // as reported by `get_if_addrs`.
             let addrs =
                 if socket_addr.ip().is_unspecified() {
-                    let addrs = host_addresses(port)?;
+                    let addrs = host_addresses(&[Protocol::Tcp(port)])?;
                     debug!("Listening on {:?}", addrs.iter().map(|(_, _, ma)| ma).collect::<Vec<_>>());
                     Addresses::Many(addrs)
                 } else {
-                    let ma = ip_to_multiaddr(local_addr.ip(), port);
+                    let ma = Multiaddr::from(local_addr.ip()).with(Protocol::Tcp(port));
                     debug!("Listening on {:?}", ma);
                     Addresses::One(ma)
                 };
@@ -257,7 +255,7 @@ impl $tcp_listen_stream {
                             return (Ok(ListenerEvent::Error(err)), self);
                         }
                     }
-                    ip_to_multiaddr(sock_addr.ip(), sock_addr.port())
+                    Multiaddr::from(sock_addr.ip()).with(Protocol::Tcp(sock_addr.port()))
                 }
                 Err(err) => {
                     debug!("Failed to get local address of incoming socket: {:?}", err);
@@ -265,7 +263,7 @@ impl $tcp_listen_stream {
                 }
             };
 
-            let remote_addr = ip_to_multiaddr(sock_addr.ip(), sock_addr.port());
+            let remote_addr = Multiaddr::from(sock_addr.ip()).with(Protocol::Tcp(sock_addr.port()));
 
             match $apply_config(&self.config, &sock) {
                 Ok(()) => {
@@ -389,41 +387,6 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     }
 }
 
-// Create a [`Multiaddr`] from the given IP address and port number.
-fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
-    let proto = match ip {
-        IpAddr::V4(ip) => Protocol::Ip4(ip),
-        IpAddr::V6(ip) => Protocol::Ip6(ip)
-    };
-    let it = iter::once(proto).chain(iter::once(Protocol::Tcp(port)));
-    Multiaddr::from_iter(it)
-}
-
-// Collect all local host addresses and use the provided port number as listen port.
-fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
-    let mut addrs = Vec::new();
-    for iface in get_if_addrs()? {
-        let ip = iface.ip();
-        let ma = ip_to_multiaddr(ip, port);
-        let ipn = match iface.addr {
-            IfAddr::V4(ip4) => {
-                let prefix_len = (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();
-                let ipnet = Ipv4Net::new(ip4.ip, prefix_len as u8)
-                    .expect("prefix_len is the number of bits in a u32, so can not exceed 32");
-                IpNet::V4(ipnet)
-            }
-            IfAddr::V6(ip6) => {
-                let prefix_len = (!u128::from_be_bytes(ip6.netmask.octets())).leading_zeros();
-                let ipnet = Ipv6Net::new(ip6.ip, prefix_len as u8)
-                    .expect("prefix_len is the number of bits in a u128, so can not exceed 128");
-                IpNet::V6(ipnet)
-            }
-        };
-        addrs.push((ip, ipn, ma))
-    }
-    Ok(addrs)
-}
-
 /// Listen address information.
 #[derive(Debug)]
 enum Addresses {
@@ -459,7 +422,7 @@ fn check_for_interface_changes<T>(
     // and expired addresses.
     //
     // TODO: We do not detect expired addresses unless there is a new address.
-    let old_listen_addrs = std::mem::replace(listen_addrs, host_addresses(listen_port)?);
+    let old_listen_addrs = std::mem::replace(listen_addrs, host_addresses(&[Protocol::Tcp(listen_port)])?);
 
     // Check for addresses no longer in use.
     for (ip, _, ma) in old_listen_addrs.iter() {

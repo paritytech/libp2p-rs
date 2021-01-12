@@ -59,6 +59,7 @@ all-features = true
 [dependencies]
 atomic = "0.5.0"
 bytes = "0.5"
+fnv = "1.0"
 futures = "0.3.1"
 lazy_static = "1.2"
 libp2p-core = { version = "0.26.0", path = "core" }

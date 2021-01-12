@@ -38,6 +38,15 @@ pub trait TransportExt: Transport {
         BandwidthLogging::new(self)
     }
 
+    /// Adds a layer on the `Transport` that remembers addresses that we failed to reach, and
+    /// adds a knock-back delay before trying them again.
+    fn with_hammering_prevention(self) -> HammerPrevention<Self>
+    where
+        Self: Sized
+    {
+        HammerPrevention::new(self)
+    }
+
     // TODO: add methods to easily upgrade for secio/mplex/yamux
 }
 

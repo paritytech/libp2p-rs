@@ -33,6 +33,7 @@ use std::{error::Error, fmt};
 pub mod and_then;
 pub mod choice;
 pub mod dummy;
+pub mod hammer_prevent;
 pub mod map;
 pub mod map_err;
 pub mod memory;

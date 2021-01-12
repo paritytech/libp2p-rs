@@ -249,6 +249,7 @@ pub use libp2p_request_response as request_response;
 mod transport_ext;
 
 pub mod bandwidth;
+pub mod hammer_prevent;
 pub mod simple;
 
 pub use self::core::{

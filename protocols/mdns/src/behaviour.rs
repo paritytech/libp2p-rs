@@ -37,7 +37,7 @@ use std::{
     cmp,
     collections::VecDeque,
     fmt, io, iter,
-    net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     pin::Pin,
     task::Context,
     task::Poll,
@@ -45,8 +45,9 @@ use std::{
 };
 
 lazy_static! {
-    static ref IPV4_MDNS_MULTICAST_ADDRESS: SocketAddr =
-        SocketAddr::from((Ipv4Addr::new(224, 0, 0, 251), 5353));
+    static ref IPV4_MDNS_MULTICAST_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::new(224, 0, 0, 251));
+    static ref IPV6_MDNS_MULTICAST_ADDRESS: IpAddr =
+        IpAddr::V6(Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB));
 }
 
 pub struct MdnsConfig {
@@ -58,6 +59,8 @@ pub struct MdnsConfig {
     /// peer joins the network. Receiving an mdns packet resets the timer
     /// preventing unnecessary traffic.
     pub query_interval: Duration,
+    /// IP address for multicast.
+    pub ip_addr: IpAddr,
 }
 
 impl Default for MdnsConfig {
@@ -65,6 +68,7 @@ impl Default for MdnsConfig {
         Self {
             ttl: Duration::from_secs(6 * 60),
             query_interval: Duration::from_secs(5 * 60),
+            ip_addr: *IPV4_MDNS_MULTICAST_ADDRESS,
         }
     }
 }
@@ -115,31 +119,59 @@ pub struct Mdns {
 
     /// Discovery timer.
     timeout: Timer,
+
+    // Mutlicast address.
+    multicast_addr: IpAddr,
+
+    // Socket address.
+    socket_addr: SocketAddr,
 }
 
 impl Mdns {
     /// Builds a new `Mdns` behaviour.
     pub async fn new(config: MdnsConfig) -> io::Result<Self> {
-        let recv_socket = {
-            let socket = Socket::new(
-                Domain::ipv4(),
-                Type::dgram(),
-                Some(socket2::Protocol::udp()),
-            )?;
-            socket.set_reuse_address(true)?;
-            #[cfg(unix)]
-            socket.set_reuse_port(true)?;
-            socket.bind(&SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 5353).into())?;
-            let socket = socket.into_udp_socket();
-            socket.set_multicast_loop_v4(true)?;
-            socket.set_multicast_ttl_v4(255)?;
-            Async::new(socket)?
+        let recv_socket = match config.ip_addr {
+            IpAddr::V4(_) => {
+                let socket = Socket::new(
+                    Domain::ipv4(),
+                    Type::dgram(),
+                    Some(socket2::Protocol::udp()),
+                )?;
+                socket.set_reuse_address(true)?;
+                #[cfg(unix)]
+                socket.set_reuse_port(true)?;
+                socket.bind(&SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 5353).into())?;
+                let socket = socket.into_udp_socket();
+                socket.set_multicast_loop_v4(true)?;
+                socket.set_multicast_ttl_v4(255)?;
+                Async::new(socket)?
+            }
+            IpAddr::V6(_) => {
+                let socket = Socket::new(
+                    Domain::ipv6(),
+                    Type::dgram(),
+                    Some(socket2::Protocol::udp()),
+                )?;
+                socket.set_reuse_address(true)?;
+                #[cfg(unix)]
+                socket.set_reuse_port(true)?;
+                socket.bind(&SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 5353).into())?;
+                let socket = socket.into_udp_socket();
+                socket.set_multicast_loop_v6(true)?;
+                Async::new(socket)?
+            }
         };
         let send_socket = {
-            let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+            let addrs = [
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+                SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
+            ];
+
+            let socket = std::net::UdpSocket::bind(&addrs[..])?;
             Async::new(socket)?
         };
         let if_watch = if_watch::IfWatcher::new().await?;
+        let socket_addr = SocketAddr::new(config.ip_addr, 5353);
         Ok(Self {
             recv_socket,
             send_socket,
@@ -152,6 +184,8 @@ impl Mdns {
             query_interval: config.query_interval,
             ttl: config.ttl,
             timeout: Timer::interval(config.query_interval),
+            multicast_addr: config.ip_addr,
+            socket_addr: socket_addr,
         })
     }
 
@@ -278,19 +312,33 @@ impl NetworkBehaviour for Mdns {
         >,
     > {
         while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
-            let multicast = From::from([224, 0, 0, 251]);
             let socket = self.recv_socket.get_ref();
             match event {
                 Ok(IfEvent::Up(inet)) => {
                     if inet.addr().is_loopback() {
                         continue;
                     }
-                    if let IpAddr::V4(addr) = inet.addr() {
-                        log::trace!("joining multicast on iface {}", addr);
-                        if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
-                            log::error!("join multicast failed: {}", err);
-                        } else {
-                            self.send_buffer.push_back(build_query());
+                    match self.multicast_addr {
+                        IpAddr::V4(multicast) => {
+                            if let IpAddr::V4(addr) = inet.addr() {
+                                log::trace!("joining multicast on iface {}", addr);
+                                if let Err(err) = socket.join_multicast_v4(&multicast, &addr) {
+                                    log::error!("join multicast failed: {}", err);
+                                } else {
+                                    self.send_buffer.push_back(build_query());
+                                }
+                            }
+                        }
+                        IpAddr::V6(multicast) => {
+                            if let IpAddr::V6(addr) = inet.addr() {
+                                log::trace!("joining multicast on iface {}", addr);
+                                //TODO: determine interface ID now it generates errors.
+                                if let Err(err) = socket.join_multicast_v6(&multicast, 0) {
+                                    log::error!("join multicast failed: {}", err);
+                                } else {
+                                    self.send_buffer.push_back(build_query());
+                                }
+                            }
                         }
                     }
                 }
@@ -298,10 +346,22 @@ impl NetworkBehaviour for Mdns {
                     if inet.addr().is_loopback() {
                         continue;
                     }
-                    if let IpAddr::V4(addr) = inet.addr() {
-                        log::trace!("leaving multicast on iface {}", addr);
-                        if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
-                            log::error!("leave multicast failed: {}", err);
+                    match self.multicast_addr {
+                        IpAddr::V4(multicast) => {
+                            if let IpAddr::V4(addr) = inet.addr() {
+                                log::trace!("leaving multicast on iface {}", addr);
+                                if let Err(err) = socket.leave_multicast_v4(&multicast, &addr) {
+                                    log::error!("leave multicast failed: {}", err);
+                                }
+                            }
+                        }
+                        IpAddr::V6(multicast) => {
+                            if let IpAddr::V6(addr) = inet.addr() {
+                                log::trace!("leaving multicast on iface {}", addr);
+                                if let Err(err) = socket.leave_multicast_v6(&multicast, 0) {
+                                    log::error!("leave multicast failed: {}", err);
+                                }
+                            }
                         }
                     }
                 }
@@ -334,7 +394,7 @@ impl NetworkBehaviour for Mdns {
                 if let Some(packet) = self.send_buffer.pop_front() {
                     match self
                         .send_socket
-                        .send_to(&packet, *IPV4_MDNS_MULTICAST_ADDRESS)
+                        .send_to(&packet, self.socket_addr)
                         .now_or_never()
                     {
                         Some(Ok(_)) => {}

@@ -484,11 +484,7 @@ impl Drop for Connection {
 /// Returns true if `err` is an error about an address not being supported.
 fn is_not_supported_error(err: &JsValue) -> bool {
     if let Some(err) = err.dyn_ref::<js_sys::Error>() {
-        if String::from(err.name()) == "NotSupportedError" {
-            true
-        } else {
-            false
-        }
+        err.name() == "NotSupportedError"
     } else {
         false
     }

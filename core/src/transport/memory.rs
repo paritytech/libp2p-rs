@@ -263,19 +263,14 @@ impl Drop for Listener {
 
 /// If the address is `/memory/n`, returns the value of `n`.
 fn parse_memory_addr(a: &Multiaddr) -> Result<u64, ()> {
-    let mut iter = a.iter();
-
-    let port = if let Some(Protocol::Memory(port)) = iter.next() {
-        port
-    } else {
-        return Err(());
-    };
-
-    if iter.next().is_some() {
-        return Err(());
+    let mut protocols = a.iter();
+    match protocols.next() {
+        Some(Protocol::Memory(port)) => match protocols.next() {
+            None | Some(Protocol::P2p(_)) => Ok(port),
+            _ => Err(())
+        }
+        _ => Err(())
     }
-
-    Ok(port)
 }
 
 /// A channel represents an established, in-memory, logical connection between two endpoints.

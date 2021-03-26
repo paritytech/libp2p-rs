@@ -25,6 +25,7 @@ use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::{
     PeerId,
     connection::PendingConnectionError,
+    multiaddr::Protocol,
     network::{NetworkEvent, NetworkConfig},
 };
 use rand::seq::SliceRandom;
@@ -69,8 +70,8 @@ fn deny_incoming_connec() {
                 multiaddr,
                 error: PendingConnectionError::Transport(_)
             }) => {
-                assert_eq!(peer_id, *swarm1.local_peer_id());
-                assert_eq!(multiaddr, address);
+                assert_eq!(&peer_id, swarm1.local_peer_id());
+                assert_eq!(multiaddr, address.clone().with(Protocol::P2p(peer_id.into())));
                 return Poll::Ready(Ok(()));
             },
             Poll::Ready(_) => unreachable!(),
@@ -162,21 +163,27 @@ fn dial_self_by_id() {
 fn multiple_addresses_err() {
     // Tries dialing multiple addresses, and makes sure there's one dialing error per address.
 
+    let target = PeerId::random();
+
     let mut swarm = test_network(NetworkConfig::default());
 
     let mut addresses = Vec::new();
     for _ in 0 .. 3 {
-        addresses.push(multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())]);
+        addresses.push(multiaddr![
+            Ip4([0, 0, 0, 0]),
+            Tcp(rand::random::<u16>())
+        ]);
     }
     for _ in 0 .. 5 {
-        addresses.push(multiaddr![Udp(rand::random::<u16>())]);
+        addresses.push(multiaddr![
+            Udp(rand::random::<u16>())
+        ]);
     }
     addresses.shuffle(&mut rand::thread_rng());
 
     let first = addresses[0].clone();
     let rest = (&addresses[1..]).iter().cloned();
 
-    let target = PeerId::random();
     swarm.peer(target.clone())
         .dial(first, rest, TestHandler())
         .unwrap();
@@ -191,7 +198,7 @@ fn multiple_addresses_err() {
                     error: PendingConnectionError::Transport(_)
                 }) => {
                     assert_eq!(peer_id, target);
-                    let expected = addresses.remove(0);
+                    let expected = addresses.remove(0).with(Protocol::P2p(target.clone().into()));
                     assert_eq!(multiaddr, expected);
                     if addresses.is_empty() {
                         assert_eq!(attempts_remaining, 0);

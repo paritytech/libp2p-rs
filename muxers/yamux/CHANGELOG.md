@@ -1,3 +1,11 @@
+# 0.31.0 [2021-03-17]
+
+- Update `libp2p-core`.
+
+# 0.30.1 [2021-02-17]
+
+- Update `yamux` to `0.8.1`.
+
 # 0.30.0 [2021-01-12]
 
 - Update dependencies.

@@ -2,7 +2,7 @@
 name = "libp2p"
 edition = "2018"
 description = "Peer-to-peer networking library"
-version = "0.35.0"
+version = "0.37.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [features]
 default = [
     "deflate",
-    "dns",
+    "dns-async-std",
     "floodsub",
     "identify",
     "kad",
@@ -23,6 +23,7 @@ default = [
     "ping",
     "plaintext",
     "pnet",
+    "relay",
     "request-response",
     "secp256k1",
     "streaming-response",
@@ -33,7 +34,8 @@ default = [
     "yamux",
 ]
 deflate = ["libp2p-deflate"]
-dns = ["libp2p-dns"]
+dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
+dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
 floodsub = ["libp2p-floodsub"]
 identify = ["libp2p-identify"]
 kad = ["libp2p-kad"]
@@ -44,6 +46,7 @@ noise = ["libp2p-noise"]
 ping = ["libp2p-ping"]
 plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
+relay = ["libp2p-relay"]
 request-response = ["libp2p-request-response"]
 streaming-response = ["libp2p-streaming-response"]
 tcp-async-io = ["libp2p-tcp", "libp2p-tcp/async-io"]
@@ -63,35 +66,36 @@ atomic = "0.5.0"
 bytes = "1"
 futures = "0.3.1"
 lazy_static = "1.2"
-libp2p-core = { version = "0.27.0", path = "core" }
-libp2p-floodsub = { version = "0.27.0", path = "protocols/floodsub", optional = true }
-libp2p-gossipsub = { version = "0.28.0", path = "./protocols/gossipsub", optional = true }
-libp2p-identify = { version = "0.27.0", path = "protocols/identify", optional = true }
-libp2p-kad = { version = "0.28.0", path = "protocols/kad", optional = true }
-libp2p-mplex = { version = "0.27.0", path = "muxers/mplex", optional = true }
-libp2p-noise = { version = "0.29.0", path = "transports/noise", optional = true }
-libp2p-ping = { version = "0.27.0", path = "protocols/ping", optional = true }
-libp2p-plaintext = { version = "0.27.0", path = "transports/plaintext", optional = true }
+libp2p-core = { version = "0.28.2", path = "core",  default-features = false }
+libp2p-floodsub = { version = "0.29.0", path = "protocols/floodsub", optional = true }
+libp2p-gossipsub = { version = "0.30.0", path = "./protocols/gossipsub", optional = true }
+libp2p-identify = { version = "0.29.0", path = "protocols/identify", optional = true }
+libp2p-kad = { version = "0.30.0", path = "protocols/kad", optional = true }
+libp2p-mplex = { version = "0.28.0", path = "muxers/mplex", optional = true }
+libp2p-noise = { version = "0.30.0", path = "transports/noise", optional = true }
+libp2p-ping = { version = "0.29.0", path = "protocols/ping", optional = true }
+libp2p-plaintext = { version = "0.28.0", path = "transports/plaintext", optional = true }
 libp2p-pnet = { version = "0.20.0", path = "transports/pnet", optional = true }
-libp2p-request-response = { version = "0.9.1", path = "protocols/request-response", optional = true }
+libp2p-relay = { version = "0.2.0", path = "protocols/relay", optional = true }
+libp2p-request-response = { version = "0.11.0", path = "protocols/request-response", optional = true }
 libp2p-streaming-response = { version = "0.1.0", path = "protocols/streaming-response", optional = true }
-libp2p-swarm = { version = "0.27.2", path = "swarm" }
+libp2p-swarm = { version = "0.29.0", path = "swarm" }
 libp2p-swarm-derive = { version = "0.22.0", path = "swarm-derive" }
-libp2p-uds = { version = "0.27.0", path = "transports/uds", optional = true }
-libp2p-wasm-ext = { version = "0.27.0", path = "transports/wasm-ext", optional = true }
-libp2p-yamux = { version = "0.30.0", path = "muxers/yamux", optional = true }
-multiaddr = { package = "parity-multiaddr", version = "0.11.0", path = "misc/multiaddr" }
+libp2p-uds = { version = "0.28.0", path = "transports/uds", optional = true }
+libp2p-wasm-ext = { version = "0.28.0", path = "transports/wasm-ext", default-features = false, optional = true }
+libp2p-yamux = { version = "0.31.0", path = "muxers/yamux", optional = true }
+multiaddr = { package = "parity-multiaddr", version = "0.11.2", path = "misc/multiaddr" }
 parking_lot = "0.11.0"
 pin-project = "1.0.0"
-smallvec = "1.0"
+smallvec = "1.6.1"
 wasm-timer = "0.2.4"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
-libp2p-deflate = { version = "0.27.1", path = "transports/deflate", optional = true }
-libp2p-dns = { version = "0.27.0", path = "transports/dns", optional = true }
-libp2p-mdns = { version = "0.28.0", path = "protocols/mdns", optional = true }
-libp2p-tcp = { version = "0.27.0", path = "transports/tcp", optional = true }
-libp2p-websocket = { version = "0.28.0", path = "transports/websocket", optional = true }
+libp2p-deflate = { version = "0.28.0", path = "transports/deflate", optional = true }
+libp2p-dns = { version = "0.28.1", path = "transports/dns", optional = true, default-features = false }
+libp2p-mdns = { version = "0.30.0", path = "protocols/mdns", optional = true }
+libp2p-tcp = { version = "0.28.0", path = "transports/tcp", default-features = false, optional = true }
+libp2p-websocket = { version = "0.29.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
@@ -112,6 +116,7 @@ members = [
     "protocols/kad",
     "protocols/mdns",
     "protocols/ping",
+    "protocols/relay",
     "protocols/request-response",
     "swarm",
     "swarm-derive",

@@ -24,7 +24,7 @@ use crate::structs_proto::Exchange;
 
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
-use asynchronous_codec::Framed;
+use asynchronous_codec::{Framed, FramedParts};
 use libp2p_core::{PublicKey, PeerId};
 use log::{debug, trace};
 use prost::Message;
@@ -51,7 +51,7 @@ pub struct Remote {
 }
 
 impl HandshakeContext<Local> {
-    fn new(config: PlainText2Config) -> Result<Self, PlainTextError> {
+    fn new(config: PlainText2Config) -> Self {
         let exchange = Exchange {
             id: Some(config.local_public_key.clone().into_peer_id().to_bytes()),
             pubkey: Some(config.local_public_key.clone().into_protobuf_encoding())
@@ -59,12 +59,12 @@ impl HandshakeContext<Local> {
         let mut buf = Vec::with_capacity(exchange.encoded_len());
         exchange.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
 
-        Ok(Self {
+        Self {
             config,
             state: Local {
                 exchange_bytes: buf
             }
-        })
+        }
     }
 
     fn with_remote(self, exchange_bytes: BytesMut)
@@ -119,7 +119,7 @@ where
     let mut framed_socket = Framed::new(socket, UviBytes::default());
 
     trace!("starting handshake");
-    let context = HandshakeContext::new(config)?;
+    let context = HandshakeContext::new(config);
 
     trace!("sending exchange to remote");
     framed_socket.send(BytesMut::from(&context.state.exchange_bytes[..])).await?;
@@ -134,12 +134,9 @@ where
         }
     };
 
-    // The `Framed` wrapper may have buffered additional data that
-    // was already received but is no longer part of the plaintext
-    // handshake. We need to capture that data before dropping
-    // the `Framed` wrapper via `Framed::into_inner()`.
-    let read_buffer = framed_socket.read_buffer().clone().freeze();
-
     trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
-    Ok((framed_socket.into_inner(), context.state, read_buffer))
+
+    let FramedParts { io, read_buffer, write_buffer, .. } = framed_socket.into_parts();
+    assert!(write_buffer.is_empty());
+    Ok((io, context.state, read_buffer.freeze()))
 }

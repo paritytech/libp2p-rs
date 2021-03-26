@@ -68,6 +68,8 @@
 
 mod bucket;
 mod entry;
+#[allow(clippy::ptr_offset_with_cast)]
+#[allow(clippy::assign_op_pattern)]
 mod key;
 
 pub use entry::*;

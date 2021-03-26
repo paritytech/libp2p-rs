@@ -1,4 +1,4 @@
-# 0.22.0 [unreleased]
+# 0.22.0 [2021-02-15]
 
 - Rename the crate to `libp2p-swarm-derive`.
 

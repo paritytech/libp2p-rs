@@ -313,11 +313,11 @@ where
 
     fn create_socket(&self, socket_addr: &SocketAddr) -> io::Result<Socket> {
         let domain = if socket_addr.is_ipv4() {
-            Domain::ipv4()
+            Domain::IPV4
         } else {
-            Domain::ipv6()
+            Domain::IPV6
         };
-        let socket = Socket::new(domain, Type::stream(), Some(socket2::Protocol::tcp()))?;
+        let socket = Socket::new(domain, Type::STREAM, Some(socket2::Protocol::TCP))?;
         if socket_addr.is_ipv6() {
             socket.set_only_v6(true)?;
         }
@@ -340,7 +340,7 @@ where
         socket.bind(&socket_addr.into())?;
         socket.listen(self.backlog as _)?;
         socket.set_nonblocking(true)?;
-        TcpListenStream::<T>::new(socket.into_tcp_listener(), self.port_reuse)
+        TcpListenStream::<T>::new(socket.into(), self.port_reuse)
     }
 
     async fn do_dial(self, socket_addr: SocketAddr) -> Result<T::Stream, io::Error> {
@@ -360,7 +360,7 @@ where
             Err(err) => return Err(err),
         };
 
-        let stream = T::new_stream(socket.into_tcp_stream()).await?;
+        let stream = T::new_stream(socket.into()).await?;
         Ok(stream)
     }
 }
@@ -379,18 +379,18 @@ where
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
+        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(addr.clone()) {
             sa
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
         log::debug!("listening on {}", socket_addr);
         self.do_listen(socket_addr)
-            .map_err(|e| TransportError::Other(e))
+            .map_err(TransportError::Other)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
+        let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                 return Err(TransportError::MultiaddrNotSupported(addr));
             }
@@ -582,24 +582,20 @@ where
                         match ev {
                             Ok(IfEvent::Up(inet)) => {
                                 let ip = inet.addr();
-                                if me.listen_addr.is_ipv4() == ip.is_ipv4() {
-                                    if addrs.insert(ip) {
-                                        let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                        log::debug!("New listen address: {}", ma);
-                                        me.port_reuse.register(ip, me.listen_addr.port());
-                                        return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(ma))));
-                                    }
+                                if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.insert(ip) {
+                                    let ma = ip_to_multiaddr(ip, me.listen_addr.port());
+                                    log::debug!("New listen address: {}", ma);
+                                    me.port_reuse.register(ip, me.listen_addr.port());
+                                    return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(ma))));
                                 }
                             }
                             Ok(IfEvent::Down(inet)) => {
                                 let ip = inet.addr();
-                                if me.listen_addr.is_ipv4() == ip.is_ipv4() {
-                                    if addrs.remove(&ip) {
-                                        let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                        log::debug!("Expired listen address: {}", ma);
-                                        me.port_reuse.unregister(ip, me.listen_addr.port());
-                                        return Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(ma))));
-                                    }
+                                if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.remove(&ip) {
+                                    let ma = ip_to_multiaddr(ip, me.listen_addr.port());
+                                    log::debug!("Expired listen address: {}", ma);
+                                    me.port_reuse.unregister(ip, me.listen_addr.port());
+                                    return Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(ma))));
                                 }
                             }
                             Err(err) => {
@@ -657,21 +653,34 @@ where
     }
 }
 
-// This type of logic should probably be moved into the multiaddr package
-fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
-    let mut iter = addr.iter();
-    let proto1 = iter.next().ok_or(())?;
-    let proto2 = iter.next().ok_or(())?;
-
-    if iter.next().is_some() {
-        return Err(());
+/// Extracts a `SocketAddr` from a given `Multiaddr`.
+///
+/// Fails if the given `Multiaddr` does not begin with an IP
+/// protocol encapsulating a TCP port.
+fn multiaddr_to_socketaddr(mut addr: Multiaddr) -> Result<SocketAddr, ()> {
+    // "Pop" the IP address and TCP port from the end of the address,
+    // ignoring a `/p2p/...` suffix as well as any prefix of possibly
+    // outer protocols, if present.
+    let mut port = None;
+    while let Some(proto) = addr.pop() {
+        match proto {
+            Protocol::Ip4(ipv4) => match port {
+                Some(port) => return Ok(SocketAddr::new(ipv4.into(), port)),
+                None => return Err(())
+            },
+            Protocol::Ip6(ipv6) => match port {
+                Some(port) => return Ok(SocketAddr::new(ipv6.into(), port)),
+                None => return Err(())
+            },
+            Protocol::Tcp(portnum) => match port {
+                Some(_) => return Err(()),
+                None => { port = Some(portnum) }
+            }
+            Protocol::P2p(_) => {}
+            _ => return Err(())
+        }
     }
-
-    match (proto1, proto2) {
-        (Protocol::Ip4(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
-        (Protocol::Ip6(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
-        _ => Err(()),
-    }
+    Err(())
 }
 
 // Create a [`Multiaddr`] from the given IP address and port number.
@@ -691,12 +700,12 @@ mod tests {
         use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
         assert!(
-            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
+            multiaddr_to_socketaddr("/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
                 .is_err()
         );
 
         assert_eq!(
-            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap()),
+            multiaddr_to_socketaddr("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 12345,
@@ -704,7 +713,7 @@ mod tests {
         );
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip4/255.255.255.255/tcp/8080"
+                "/ip4/255.255.255.255/tcp/8080"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
@@ -714,7 +723,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr(&"/ip6/::1/tcp/12345".parse::<Multiaddr>().unwrap()),
+            multiaddr_to_socketaddr("/ip6/::1/tcp/12345".parse::<Multiaddr>().unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
                 12345,
@@ -722,7 +731,7 @@ mod tests {
         );
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080"
+                "/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),

@@ -1,3 +1,30 @@
+# 0.30.0 [unreleased]
+
+- Derive `Debug` and `Clone` for `MdnsConfig`.
+
+- Update `libp2p-swarm`.
+
+# 0.29.0 [2021-03-17]
+
+- Introduce `MdnsConfig` with configurable TTL of discovered peer
+  records and configurable multicast query interval. The default
+  query interval is increased from 20 seconds to 5 minutes, to
+  significantly reduce bandwidth usage. To ensure timely peer
+  discovery in the majority of cases, a multicast query is
+  initiated whenever a change on a network interface is detected,
+  which includes MDNS initialisation at node startup. If necessary
+  the MDNS query interval can be reduced via the `MdnsConfig`.
+  The `MdnsService` has been removed from the public API, making
+  it compulsory that all uses occur through the `Mdns` `NetworkBehaviour`.
+  An `MdnsConfig` must now be given to `Mdns::new()`.
+  [PR 1977](https://github.com/libp2p/rust-libp2p/pull/1977).
+
+- Update `libp2p-swarm`.
+
+# 0.28.1 [2021-02-15]
+
+- Update dependencies.
+
 # 0.28.0 [2021-01-12]
 
 - Update dependencies.

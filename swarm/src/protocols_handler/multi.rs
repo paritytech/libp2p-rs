@@ -37,7 +37,7 @@ use crate::upgrade::{
 };
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
-use libp2p_core::upgrade::{self, ProtocolName, UpgradeError, NegotiationError, ProtocolError};
+use libp2p_core::upgrade::{ProtocolName, UpgradeError, NegotiationError, ProtocolError};
 use rand::Rng;
 use std::{
     cmp,
@@ -76,15 +76,12 @@ where
     /// Create and populate a `MultiHandler` from the given handler iterator.
     ///
     /// It is an error for any two protocols handlers to share the same protocol name.
-    ///
-    /// > **Note**: All handlers should use the same [`upgrade::Version`] for
-    /// > the inbound and outbound [`SubstreamProtocol`]s.
     pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
         I: IntoIterator<Item = (K, H)>
     {
         let m = MultiHandler { handlers: HashMap::from_iter(iter) };
-        uniq_proto_names(m.handlers.values().map(|h| h.listen_protocol().into_upgrade().1))?;
+        uniq_proto_names(m.handlers.values().map(|h| h.listen_protocol().into_upgrade().0))?;
         Ok(m)
     }
 }
@@ -105,34 +102,22 @@ where
     type OutboundOpenInfo = (K, <H as ProtocolsHandler>::OutboundOpenInfo);
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        let (upgrade, info, timeout, version) = self.handlers.iter()
-            .map(|(k, h)| {
-                let p = h.listen_protocol();
-                let t = *p.timeout();
-                let (v, u, i) = p.into_upgrade();
-                (k.clone(), (v, u, i, t))
+        let (upgrade, info, timeout) = self.handlers.iter()
+            .map(|(key, handler)| {
+                let proto = handler.listen_protocol();
+                let timeout = *proto.timeout();
+                let (upgrade, info) = proto.into_upgrade();
+                (key.clone(), (upgrade, info, timeout))
             })
-            .fold((Upgrade::new(), Info::new(), Duration::from_secs(0), None),
-                |(mut upg, mut inf, mut timeout, mut version), (k, (v, u, i, t))| {
+            .fold((Upgrade::new(), Info::new(), Duration::from_secs(0)),
+                |(mut upg, mut inf, mut timeout), (k, (u, i, t))| {
                     upg.upgrades.push((k.clone(), u));
                     inf.infos.push((k, i));
                     timeout = cmp::max(timeout, t);
-                    version = version.map_or(Some(v), |vv|
-                        if v != vv {
-                            // Different upgrade (i.e. protocol negotiation) protocol
-                            // versions are usually incompatible and not negotiated
-                            // themselves, so a protocol upgrade may fail.
-                            log::warn!("Differing upgrade versions. Defaulting to V1.");
-                            Some(upgrade::Version::V1)
-                        } else {
-                            Some(v)
-                        });
-                    (upg, inf, timeout, version)
+                    (upg, inf, timeout)
                 }
             );
-        SubstreamProtocol::new(upgrade, info)
-            .with_timeout(timeout)
-            .with_upgrade_protocol(version.unwrap_or(upgrade::Version::V1))
+        SubstreamProtocol::new(upgrade, info).with_timeout(timeout)
     }
 
     fn inject_fully_negotiated_outbound (
@@ -315,9 +300,6 @@ where
     /// Create and populate an `IntoMultiHandler` from the given iterator.
     ///
     /// It is an error for any two protocols handlers to share the same protocol name.
-    ///
-    /// > **Note**: All handlers should use the same [`upgrade::Version`] for
-    /// > the inbound and outbound [`SubstreamProtocol`]s.
     pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
         I: IntoIterator<Item = (K, H)>

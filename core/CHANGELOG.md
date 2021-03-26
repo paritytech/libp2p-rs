@@ -1,3 +1,27 @@
+# 0.28.2 [unreleased]
+
+- Update dependencies.
+
+# 0.28.1 [2021-03-17]
+
+- Update `paritytech-multiaddr` to `>=v0.11.2`.
+
+# 0.28.0 [2021-03-17]
+
+- `Network::dial()` understands `/p2p` addresses and `Transport::dial`
+  gets a "fully qualified" `/p2p` address when dialing a specific peer,
+  whether through the `Network::peer()` API or via `Network::dial()`
+  with a `/p2p` address.
+
+- `Network::dial()` and `network::Peer::dial()` return a `DialError`
+  on error.
+
+- Shorten and unify `Debug` impls of public keys.
+
+# 0.27.1 [2021-02-15]
+
+- Update dependencies.
+
 # 0.27.0 [2021-01-12]
 
 - (Re)add `Transport::address_translation` to permit transport-specific

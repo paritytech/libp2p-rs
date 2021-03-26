@@ -118,7 +118,7 @@
 //!
 //! // Listen on a memory transport.
 //! let memory: Multiaddr = libp2p_core::multiaddr::Protocol::Memory(10).into();
-//! let addr = libp2p_swarm::Swarm::listen_on(&mut swarm, memory).unwrap();
+//! let addr = swarm.listen_on(memory).unwrap();
 //! println!("Listening on {:?}", addr);
 //! ```
 

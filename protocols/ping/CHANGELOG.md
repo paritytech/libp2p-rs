@@ -1,3 +1,11 @@
+# 0.29.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
+# 0.28.0 [2021-03-17]
+
+- Update `libp2p-swarm`.
+
 # 0.27.0 [2021-01-12]
 
 - Update dependencies.

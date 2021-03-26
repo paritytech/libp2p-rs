@@ -43,7 +43,8 @@ use futures::{future, prelude::*};
 use libp2p::{identity, PeerId, ping::{Ping, PingConfig}, Swarm};
 use std::{error::Error, task::{Context, Poll}};
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random PeerId.
@@ -52,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", peer_id);
 
     // Create a transport.
-    let transport = libp2p::build_development_transport(id_keys)?;
+    let transport = libp2p::development_transport(id_keys).await?;
 
     // Create a ping network behaviour.
     //
@@ -69,12 +70,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     // command-line argument, if any.
     if let Some(addr) = std::env::args().nth(1) {
         let remote = addr.parse()?;
-        Swarm::dial_addr(&mut swarm, remote)?;
+        swarm.dial_addr(remote)?;
         println!("Dialed {}", addr)
     }
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned port.
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {

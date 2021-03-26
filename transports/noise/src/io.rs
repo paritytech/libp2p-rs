@@ -115,7 +115,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         this.send_offset += n;
         trace!("write: buffered {} bytes", this.send_offset);
 
-        return Poll::Ready(Ok(n))
+        Poll::Ready(Ok(n))
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {

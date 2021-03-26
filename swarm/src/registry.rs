@@ -168,8 +168,8 @@ impl Default for Addresses {
 /// The result of adding an address to an ordered list of
 /// addresses with associated scores.
 pub enum AddAddressResult {
-    Inserted,
-    Updated,
+    Inserted { expired: SmallVec<[AddressRecord; 8]> },
+    Updated { expired: SmallVec<[AddressRecord; 8]> },
 }
 
 impl Addresses {
@@ -206,8 +206,11 @@ impl Addresses {
         }
 
         // Remove addresses that have a score of 0.
+        let mut expired = SmallVec::new();
         while self.registry.last().map(|e| e.score.is_zero()).unwrap_or(false) {
-            self.registry.pop();
+            if let Some(addr) = self.registry.pop() {
+                expired.push(addr);
+            }
         }
 
         // If the address score is finite, remember this report.
@@ -220,13 +223,13 @@ impl Addresses {
             if r.addr == addr {
                 r.score = r.score + score;
                 isort(&mut self.registry);
-                return AddAddressResult::Updated
+                return AddAddressResult::Updated { expired }
             }
         }
 
         // It is a new record.
         self.registry.push(AddressRecord::new(addr, score));
-        AddAddressResult::Inserted
+        AddAddressResult::Inserted { expired }
     }
 
     /// Explicitly remove an address from the collection.

@@ -130,6 +130,7 @@ pub(crate) fn dns_name_ref(name: &str) -> Result<webpki::DNSNameRef<'_>, Error> 
 
 /// TLS related errors.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     /// An underlying I/O error.
     Io(io::Error),
@@ -137,9 +138,6 @@ pub enum Error {
     Tls(Box<dyn std::error::Error + Send + Sync>),
     /// The DNS name was invalid.
     InvalidDnsName(String),
-
-    #[doc(hidden)]
-    __Nonexhaustive
 }
 
 impl fmt::Display for Error {
@@ -148,7 +146,6 @@ impl fmt::Display for Error {
             Error::Io(e) => write!(f, "i/o error: {}", e),
             Error::Tls(e) => write!(f, "tls error: {}", e),
             Error::InvalidDnsName(n) => write!(f, "invalid DNS name: {}", n),
-            Error::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
     }
 }
@@ -158,7 +155,7 @@ impl std::error::Error for Error {
         match self {
             Error::Io(e) => Some(e),
             Error::Tls(e) => Some(&**e),
-            Error::InvalidDnsName(_) | Error::__Nonexhaustive => None
+            Error::InvalidDnsName(_) => None
         }
     }
 }

@@ -174,6 +174,16 @@ impl Multiaddr {
 
         if replaced { Some(address) } else { None }
     }
+
+    /// Checks whether the given `Multiaddr` is a suffix of this `Multiaddr`.
+    pub fn ends_with(&self, other: &Multiaddr) -> bool {
+        let n = self.bytes.len();
+        let m = other.bytes.len();
+        if n < m {
+            return false
+        }
+        self.bytes[(n - m) ..] == other.bytes[..]
+    }
 }
 
 impl fmt::Debug for Multiaddr {

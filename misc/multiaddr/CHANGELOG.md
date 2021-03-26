@@ -1,3 +1,11 @@
+# 0.11.2 [2021-03-17]
+
+- Add `Multiaddr::ends_with()`.
+
+# 0.11.1 [2021-02-15]
+
+- Update dependencies
+
 # 0.11.0 [2021-01-12]
 
 - Update dependencies

@@ -20,7 +20,7 @@
 
 //! Secp256k1 keys.
 
-use asn1_der::{FromDerObject, DerObject};
+use asn1_der::typed::{DerDecodable, Sequence};
 use rand::RngCore;
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use secp256k1::{Message, Signature};
@@ -110,21 +110,21 @@ impl SecretKey {
     }
 
     /// Decode a DER-encoded Secp256k1 secret key in an ECPrivateKey
-    /// structure as defined in [RFC5915].
+    /// structure as defined in [RFC5915], zeroing the input slice on success.
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     pub fn from_der(mut der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         // TODO: Stricter parsing.
         let der_obj = der.as_mut();
-        let obj: Vec<DerObject> = FromDerObject::deserialize((&*der_obj).iter())
+        let obj: Sequence = DerDecodable::decode(der_obj)
             .map_err(|e| DecodingError::new("Secp256k1 DER ECPrivateKey").source(e))?;
-        der_obj.zeroize();
-        let sk_obj = obj.into_iter().nth(1)
-            .ok_or_else(|| DecodingError::new("Not enough elements in DER"))?;
-        let mut sk_bytes: Vec<u8> = FromDerObject::from_der_object(sk_obj)
+        let sk_obj = obj.get(1)
+            .map_err(|e| DecodingError::new("Not enough elements in DER").source(e))?;
+        let mut sk_bytes: Vec<u8> = asn1_der::typed::DerDecodable::load(sk_obj)
             .map_err(DecodingError::new)?;
         let sk = SecretKey::from_bytes(&mut sk_bytes)?;
         sk_bytes.zeroize();
+        der_obj.zeroize();
         Ok(sk)
     }
 
@@ -151,8 +151,18 @@ impl SecretKey {
 }
 
 /// A Secp256k1 public key.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct PublicKey(secp256k1::PublicKey);
+
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PublicKey(compressed): ")?;
+        for byte in &self.encode() {
+            write!(f, "{:x}", byte)?;
+        }
+        Ok(())
+    }
+}
 
 impl PublicKey {
     /// Verify the Secp256k1 signature on a message using the public key.

@@ -131,7 +131,7 @@ impl FixedPeersIter {
 
     pub fn next(&mut self) -> PeersIterState<'_> {
         match &mut self.state {
-            State::Finished => return PeersIterState::Finished,
+            State::Finished => PeersIterState::Finished,
             State::Waiting { num_waiting } => {
                 if *num_waiting >= self.parallelism.get() {
                     return PeersIterState::WaitingAtCapacity
@@ -144,7 +144,7 @@ impl FixedPeersIter {
                         } else {
                             return PeersIterState::Waiting(None)
                         }
-                        Some(p) => match self.peers.entry(p.clone()) {
+                        Some(p) => match self.peers.entry(p) {
                             Entry::Occupied(_) => {} // skip duplicates
                             Entry::Vacant(e) => {
                                 *num_waiting += 1;

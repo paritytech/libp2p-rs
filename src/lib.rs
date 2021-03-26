@@ -56,7 +56,7 @@
 //! the dialing to take place and eventually resolve to a connection. Polling
 //! futures is typically done through a [tokio] runtime.
 //!
-//! The easiest way to create a transport is to use [`build_development_transport`].
+//! The easiest way to create a transport is to use [`development_transport`].
 //! This function provides support for the most common protocols but it is also
 //! subject to change over time and should thus not be used in production
 //! configurations.
@@ -65,8 +65,8 @@
 //!
 //! ```rust
 //! let keypair = libp2p::identity::Keypair::generate_ed25519();
-//! let _transport = libp2p::build_development_transport(keypair);
-//! // _transport.dial(...);
+//! let _transport = libp2p::development_transport(keypair);
+//! // _transport.await?.dial(...);
 //! ```
 //!
 //! The keypair that is passed as an argument in the above example is used
@@ -85,7 +85,7 @@
 //! Example ([`noise`] + [`yamux`] Protocol Upgrade):
 //!
 //! ```rust
-//! # #[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "noise", feature = "yamux"))] {
+//! # #[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-async-io", feature = "noise", feature = "yamux"))] {
 //! use libp2p::{Transport, core::upgrade, tcp::TcpConfig, noise, identity::Keypair, yamux};
 //! let tcp = TcpConfig::new();
 //! let id_keys = Keypair::generate_ed25519();
@@ -130,7 +130,7 @@
 //!      identity of the remote peer of the established connection, which is
 //!      usually obtained through a transport encryption protocol such as
 //!      [`noise`] that authenticates the peer. See the implementation of
-//!      [`build_development_transport`] for an example.
+//!      [`development_transport`] for an example.
 //!   3. Creating a struct that implements the [`NetworkBehaviour`] trait and combines all the
 //!      desired network behaviours, implementing the event handlers as per the
 //!      desired application's networking logic.
@@ -154,9 +154,6 @@
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 
-#[cfg(feature = "pnet")]
-use libp2p_pnet::{PnetConfig, PreSharedKey};
-
 pub use bytes;
 pub use futures;
 #[doc(inline)]
@@ -171,8 +168,8 @@ pub use libp2p_core as core;
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_deflate as deflate;
-#[cfg(feature = "dns")]
-#[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
+#[cfg(any(feature = "dns-async-std", feature = "dns-tokio"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "dns-async-std", feature = "dns-tokio"))))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_dns as dns;
@@ -241,6 +238,10 @@ pub use libp2p_yamux as yamux;
 #[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "relay")]
+#[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
+#[doc(inline)]
+pub use libp2p_relay as relay;
 #[cfg(feature = "request-response")]
 #[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
 #[doc(inline)]
@@ -264,35 +265,27 @@ pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
 
-/// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
+/// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
+///
+///  * DNS resolution.
+///  * Noise protocol encryption.
+///  * Websockets.
+///  * Both Yamux and Mplex for substream multiplexing.
+///
+/// All async I/O of the transport is based on `async-std`.
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
-pub fn build_development_transport(keypair: identity::Keypair)
-    -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
-{
-     build_tcp_ws_noise_mplex_yamux(keypair)
-}
-
-/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
-///
-/// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer,
-/// and mplex or yamux as the multiplexing layer.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
-pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair)
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-async-io", feature = "dns-async-std", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-async-io", feature = "dns-async-std", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
+pub async fn development_transport(keypair: identity::Keypair)
     -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
 {
     let transport = {
-        #[cfg(feature = "tcp-async-io")]
         let tcp = tcp::TcpConfig::new().nodelay(true);
-        #[cfg(feature = "tcp-tokio")]
-        let tcp = tcp::TokioTcpConfig::new().nodelay(true);
-        let transport = dns::DnsConfig::new(tcp)?;
-        let trans_clone = transport.clone();
-        transport.or_transport(websocket::WsConfig::new(trans_clone))
+        let dns_tcp = dns::DnsConfig::system(tcp).await?;
+        let ws_dns_tcp = websocket::WsConfig::new(dns_tcp.clone());
+        dns_tcp.or_transport(ws_dns_tcp)
     };
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
@@ -307,23 +300,27 @@ pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair)
         .boxed())
 }
 
-/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
+/// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
-/// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer,
-/// and mplex or yamux as the multiplexing layer.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-io", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))))]
-pub fn build_tcp_ws_pnet_noise_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
+///  * DNS resolution.
+///  * Noise protocol encryption.
+///  * Websockets.
+///  * Both Yamux and Mplex for substream multiplexing.
+///
+/// All async I/O of the transport is based on `tokio`.
+///
+/// > **Note**: This `Transport` is not suitable for production usage, as its implementation
+/// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-tokio", feature = "dns-tokio", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-tokio", feature = "dns-tokio", feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
+pub fn tokio_development_transport(keypair: identity::Keypair)
     -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>>
 {
     let transport = {
-        #[cfg(feature = "tcp-async-io")]
-        let tcp = tcp::TcpConfig::new().nodelay(true);
-        #[cfg(feature = "tcp-tokio")]
         let tcp = tcp::TokioTcpConfig::new().nodelay(true);
-        let transport = dns::DnsConfig::new(tcp)?;
-        let trans_clone = transport.clone();
-        transport.or_transport(websocket::WsConfig::new(trans_clone))
+        let dns_tcp = dns::TokioDnsConfig::system(tcp)?;
+        let ws_dns_tcp = websocket::WsConfig::new(dns_tcp.clone());
+        dns_tcp.or_transport(ws_dns_tcp)
     };
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
@@ -331,7 +328,6 @@ pub fn build_tcp_ws_pnet_noise_mplex_yamux(keypair: identity::Keypair, psk: PreS
         .expect("Signing libp2p-noise static DH keypair failed.");
 
     Ok(transport
-        .and_then(move |socket, _| PnetConfig::new(psk).handshake(socket))
         .upgrade(core::upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::YamuxConfig::default(), mplex::MplexConfig::default()))

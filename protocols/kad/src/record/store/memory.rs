@@ -205,7 +205,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
                 let p = providers.remove(i);
                 self.provided.remove(&p);
             }
-            if providers.len() == 0 {
+            if providers.is_empty() {
                 e.remove();
             }
         }

@@ -148,7 +148,7 @@ impl ClosestPeersIter {
             return false
         }
 
-        let key = Key::from(peer.clone());
+        let key = Key::from(*peer);
         let distance = key.distance(&self.target);
 
         // Mark the peer as succeeded.
@@ -222,7 +222,7 @@ impl ClosestPeersIter {
             return false
         }
 
-        let key = Key::from(peer.clone());
+        let key = Key::from(*peer);
         let distance = key.distance(&self.target);
 
         match self.closest_peers.entry(distance) {

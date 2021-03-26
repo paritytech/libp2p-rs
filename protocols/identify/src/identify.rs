@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{IdentifyHandler, IdentifyHandlerEvent};
+use crate::handler::{IdentifyHandler, IdentifyHandlerEvent, IdentifyPush};
 use crate::protocol::{IdentifyInfo, ReplySubstream};
 use futures::prelude::*;
 use libp2p_core::{
@@ -26,24 +26,27 @@ use libp2p_core::{
     Multiaddr,
     PeerId,
     PublicKey,
-    connection::ConnectionId,
-    upgrade::{ReadOneError, UpgradeError}
+    connection::{ConnectionId, ListenerId},
+    upgrade::UpgradeError
 };
 use libp2p_swarm::{
     AddressScore,
+    DialPeerCondition,
     NegotiatedSubstream,
     NetworkBehaviour,
     NetworkBehaviourAction,
+    NotifyHandler,
     PollParameters,
     ProtocolsHandler,
     ProtocolsHandlerUpgrErr
 };
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashSet, HashMap, VecDeque},
     io,
     pin::Pin,
     task::Context,
-    task::Poll
+    task::Poll,
+    time::Duration,
 };
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
@@ -53,18 +56,16 @@ use std::{
 /// are reported via [`NetworkBehaviourAction::ReportObservedAddr`] with a
 /// [score](AddressScore) of `1`.
 pub struct Identify {
-    /// Protocol version to send back to remotes.
-    protocol_version: String,
-    /// Agent version to send back to remotes.
-    agent_version: String,
-    /// The public key of the local node. To report on the wire.
-    local_public_key: PublicKey,
+    config: IdentifyConfig,
     /// For each peer we're connected to, the observed address to send back to it.
-    observed_addresses: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
+    connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
     /// Pending replies to send.
     pending_replies: VecDeque<Reply>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<(), IdentifyEvent>>,
+    events: VecDeque<NetworkBehaviourAction<IdentifyPush, IdentifyEvent>>,
+    /// Peers to which an active push with current information about
+    /// the local peer should be sent.
+    pending_push: HashSet<PeerId>,
 }
 
 /// A pending reply to an inbound identification request.
@@ -82,16 +83,111 @@ enum Reply {
     }
 }
 
+/// Configuration for the [`Identify`] [`NetworkBehaviour`].
+#[non_exhaustive]
+pub struct IdentifyConfig {
+    /// Application-specific version of the protocol family used by the peer,
+    /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
+    pub protocol_version: String,
+    /// The public key of the local node. To report on the wire.
+    pub local_public_key: PublicKey,
+    /// Name and version of the local peer implementation, similar to the
+    /// `User-Agent` header in the HTTP protocol.
+    ///
+    /// Defaults to `rust-libp2p/<libp2p-identify-version>`.
+    pub agent_version: String,
+    /// The initial delay before the first identification request
+    /// is sent to a remote on a newly established connection.
+    ///
+    /// Defaults to 500ms.
+    pub initial_delay: Duration,
+    /// The interval at which identification requests are sent to
+    /// the remote on established connections after the first request,
+    /// i.e. the delay between identification requests.
+    ///
+    /// Defaults to 5 minutes.
+    pub interval: Duration,
+
+    /// Whether new or expired listen addresses of the local node should
+    /// trigger an active push of an identify message to all connected peers.
+    ///
+    /// Enabling this option can result in connected peers being informed
+    /// earlier about new or expired listen addresses of the local node,
+    /// i.e. before the next periodic identify request with each peer.
+    ///
+    /// Disabled by default.
+    pub push_listen_addr_updates: bool,
+}
+
+impl IdentifyConfig {
+    /// Creates a new configuration for the `Identify` behaviour that
+    /// advertises the given protocol version and public key.
+    pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
+        IdentifyConfig {
+            protocol_version,
+            agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
+            local_public_key,
+            initial_delay: Duration::from_millis(500),
+            interval: Duration::from_secs(5 * 60),
+            push_listen_addr_updates: false,
+        }
+    }
+
+    /// Configures the agent version sent to peers.
+    pub fn with_agent_version(mut self, v: String) -> Self {
+        self.agent_version = v;
+        self
+    }
+
+    /// Configures the initial delay before the first identification
+    /// request is sent on a newly established connection to a peer.
+    pub fn with_initial_delay(mut self, d: Duration) -> Self {
+        self.initial_delay = d;
+        self
+    }
+
+    /// Configures the interval at which identification requests are
+    /// sent to peers after the initial request.
+    pub fn with_interval(mut self, d: Duration) -> Self {
+        self.interval = d;
+        self
+    }
+
+    /// Configures whether new or expired listen addresses of the local
+    /// node should trigger an active push of an identify message to all
+    /// connected peers.
+    pub fn with_push_listen_addr_updates(mut self, b: bool) -> Self {
+        self.push_listen_addr_updates = b;
+        self
+    }
+}
+
 impl Identify {
     /// Creates a new `Identify` network behaviour.
-    pub fn new(protocol_version: String, agent_version: String, local_public_key: PublicKey) -> Self {
+    pub fn new(config: IdentifyConfig) -> Self {
         Identify {
-            protocol_version,
-            agent_version,
-            local_public_key,
-            observed_addresses: HashMap::new(),
+            config,
+            connected: HashMap::new(),
             pending_replies: VecDeque::new(),
             events: VecDeque::new(),
+            pending_push: HashSet::new(),
+        }
+    }
+
+    /// Initiates an active push of the local peer information to the given peers.
+    pub fn push<I>(&mut self, peers: I)
+    where
+        I: IntoIterator<Item = PeerId>
+    {
+        for p in peers {
+            if self.pending_push.insert(p) {
+                if !self.connected.contains_key(&p) {
+                    self.events.push_back(NetworkBehaviourAction::DialPeer {
+                        peer_id: p,
+                        condition: DialPeerCondition::Disconnected
+                    });
+                }
+            }
         }
     }
 }
@@ -101,7 +197,7 @@ impl NetworkBehaviour for Identify {
     type OutEvent = IdentifyEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        IdentifyHandler::new()
+        IdentifyHandler::new(self.config.initial_delay, self.config.interval)
     }
 
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -117,17 +213,36 @@ impl NetworkBehaviour for Identify {
             ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
         };
 
-        self.observed_addresses.entry(peer_id.clone()).or_default().insert(*conn, addr);
+        self.connected.entry(*peer_id).or_default().insert(*conn, addr);
     }
 
     fn inject_connection_closed(&mut self, peer_id: &PeerId, conn: &ConnectionId, _: &ConnectedPoint) {
-        if let Some(addrs) = self.observed_addresses.get_mut(peer_id) {
+        if let Some(addrs) = self.connected.get_mut(peer_id) {
             addrs.remove(conn);
         }
     }
 
+    fn inject_dial_failure(&mut self, peer_id: &PeerId) {
+        if !self.connected.contains_key(peer_id) {
+            self.pending_push.remove(peer_id);
+        }
+    }
+
     fn inject_disconnected(&mut self, peer_id: &PeerId) {
-        self.observed_addresses.remove(peer_id);
+        self.connected.remove(peer_id);
+        self.pending_push.remove(peer_id);
+    }
+
+    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
+        if self.config.push_listen_addr_updates {
+            self.pending_push.extend(self.connected.keys());
+        }
+    }
+
+    fn inject_expired_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
+        if self.config.push_listen_addr_updates {
+            self.pending_push.extend(self.connected.keys());
+        }
     }
 
     fn inject_event(
@@ -137,22 +252,22 @@ impl NetworkBehaviour for Identify {
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
-            IdentifyHandlerEvent::Identified(remote) => {
+            IdentifyHandlerEvent::Identified(info) => {
+                let observed = info.observed_addr.clone();
                 self.events.push_back(
                     NetworkBehaviourAction::GenerateEvent(
                         IdentifyEvent::Received {
                             peer_id,
-                            info: remote.info,
-                            observed_addr: remote.observed_addr.clone(),
+                            info,
                         }));
                 self.events.push_back(
                     NetworkBehaviourAction::ReportObservedAddr {
-                        address: remote.observed_addr,
+                        address: observed,
                         score: AddressScore::Finite(1),
                     });
             }
             IdentifyHandlerEvent::Identify(sender) => {
-                let observed = self.observed_addresses.get(&peer_id)
+                let observed = self.connected.get(&peer_id)
                     .and_then(|addrs| addrs.get(&connection))
                     .expect("`inject_event` is only called with an established connection \
                              and `inject_connection_established` ensures there is an entry; qed");
@@ -185,17 +300,42 @@ impl NetworkBehaviour for Identify {
             return Poll::Ready(event);
         }
 
+        // Check for a pending active push to perform.
+        let peer_push = self.pending_push.iter().find_map(|peer| {
+            self.connected.get(peer).map(|conns| {
+                let observed_addr = conns
+                    .values()
+                    .next()
+                    .expect("connected peer has a connection")
+                    .clone();
+
+                let listen_addrs = listen_addrs(params);
+                let protocols = supported_protocols(params);
+
+                let info = IdentifyInfo {
+                    public_key: self.config.local_public_key.clone(),
+                    protocol_version: self.config.protocol_version.clone(),
+                    agent_version: self.config.agent_version.clone(),
+                    listen_addrs,
+                    protocols,
+                    observed_addr,
+                };
+
+                (*peer, IdentifyPush(info))
+            })
+        });
+
+        if let Some((peer_id, push)) = peer_push {
+            self.pending_push.remove(&peer_id);
+            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                event: push,
+                handler: NotifyHandler::Any,
+            })
+        }
+
+        // Check for pending replies to send.
         if let Some(r) = self.pending_replies.pop_front() {
-            // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
-            // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
-            let protocols: Vec<_> = params
-                .supported_protocols()
-                .map(|p| String::from_utf8_lossy(&p).to_string())
-                .collect();
-
-            let mut listen_addrs: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
-            listen_addrs.extend(params.listened_addresses());
-
             let mut sending = 0;
             let to_send = self.pending_replies.len() + 1;
             let mut reply = Some(r);
@@ -203,13 +343,14 @@ impl NetworkBehaviour for Identify {
                 match reply {
                     Some(Reply::Queued { peer, io, observed }) => {
                         let info = IdentifyInfo {
-                            public_key: self.local_public_key.clone(),
-                            protocol_version: self.protocol_version.clone(),
-                            agent_version: self.agent_version.clone(),
-                            listen_addrs: listen_addrs.clone(),
-                            protocols: protocols.clone(),
+                            listen_addrs: listen_addrs(params),
+                            protocols: supported_protocols(params),
+                            public_key: self.config.local_public_key.clone(),
+                            protocol_version: self.config.protocol_version.clone(),
+                            agent_version: self.config.agent_version.clone(),
+                            observed_addr: observed,
                         };
-                        let io = Box::pin(io.send(info, &observed));
+                        let io = Box::pin(io.send(info));
                         reply = Some(Reply::Sending { peer, io });
                     }
                     Some(Reply::Sending { peer, mut io }) => {
@@ -231,7 +372,7 @@ impl NetworkBehaviour for Identify {
                             Poll::Ready(Err(err)) => {
                                 let event = IdentifyEvent::Error {
                                     peer_id: peer,
-                                    error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(err.into()))
+                                    error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(err))
                                 };
                                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                             },
@@ -255,8 +396,6 @@ pub enum IdentifyEvent {
         peer_id: PeerId,
         /// The information provided by the peer.
         info: IdentifyInfo,
-        /// The address observed by the peer for the local node.
-        observed_addr: Multiaddr,
     },
     /// Identifying information of the local node has been sent to a peer.
     Sent {
@@ -268,14 +407,29 @@ pub enum IdentifyEvent {
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
-        error: ProtocolsHandlerUpgrErr<ReadOneError>,
+        error: ProtocolsHandlerUpgrErr<io::Error>,
     },
+}
+
+fn supported_protocols(params: &impl PollParameters) -> Vec<String> {
+    // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
+    // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
+    params
+        .supported_protocols()
+        .map(|p| String::from_utf8_lossy(&p).to_string())
+        .collect()
+}
+
+fn listen_addrs(params: &impl PollParameters) -> Vec<Multiaddr> {
+    let mut listen_addrs: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
+    listen_addrs.extend(params.listened_addresses());
+    listen_addrs
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Identify, IdentifyEvent};
-    use futures::{prelude::*, pin_mut};
+    use super::*;
+    use futures::pin_mut;
     use libp2p_core::{
         identity,
         PeerId,
@@ -303,22 +457,26 @@ mod tests {
     }
 
     #[test]
-    fn periodic_id_works() {
+    fn periodic_identify() {
         let (mut swarm1, pubkey1) = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new("a".to_string(), "b".to_string(), pubkey.clone());
+            let protocol = Identify::new(
+                IdentifyConfig::new("a".to_string(), pubkey.clone())
+                    .with_agent_version("b".to_string()));
             let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
             (swarm, pubkey)
         };
 
         let (mut swarm2, pubkey2) = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new("c".to_string(), "d".to_string(), pubkey.clone());
+            let protocol = Identify::new(
+                IdentifyConfig::new("c".to_string(), pubkey.clone())
+                    .with_agent_version("d".to_string()));
             let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
             (swarm, pubkey)
         };
 
-        Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
         let listen_addr = async_std::task::block_on(async {
             loop {
@@ -330,7 +488,7 @@ mod tests {
                 }
             }
         });
-        Swarm::dial_addr(&mut swarm2, listen_addr).unwrap();
+        swarm2.dial_addr(listen_addr).unwrap();
 
         // nb. Either swarm may receive the `Identified` event first, upon which
         // it will permit the connection to be closed, as defined by
@@ -362,6 +520,78 @@ mod tests {
                     }
                     _ => {}
                 }
+            }
+        })
+    }
+
+    #[test]
+    fn identify_push() {
+        let _ = env_logger::try_init();
+
+        let (mut swarm1, pubkey1) = {
+            let (pubkey, transport) = transport();
+            let protocol = Identify::new(
+                IdentifyConfig::new("a".to_string(), pubkey.clone())
+                    // Delay identification requests so we can test the push protocol.
+                    .with_initial_delay(Duration::from_secs(u32::MAX as u64)));
+            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            (swarm, pubkey)
+        };
+
+        let (mut swarm2, pubkey2) = {
+            let (pubkey, transport) = transport();
+            let protocol = Identify::new(
+                IdentifyConfig::new("a".to_string(), pubkey.clone())
+                    .with_agent_version("b".to_string())
+                    // Delay identification requests so we can test the push protocol.
+                    .with_initial_delay(Duration::from_secs(u32::MAX as u64)));
+            let swarm = Swarm::new(transport, protocol, pubkey.clone().into_peer_id());
+            (swarm, pubkey)
+        };
+
+        Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+
+        let listen_addr = async_std::task::block_on(async {
+            loop {
+                let swarm1_fut = swarm1.next_event();
+                pin_mut!(swarm1_fut);
+                match swarm1_fut.await {
+                    SwarmEvent::NewListenAddr(addr) => return addr,
+                    _ => {}
+                }
+            }
+        });
+
+        Swarm::dial_addr(&mut swarm2, listen_addr).unwrap();
+
+        async_std::task::block_on(async move {
+            loop {
+                let swarm1_fut = swarm1.next_event();
+                let swarm2_fut = swarm2.next_event();
+
+                {
+                    pin_mut!(swarm1_fut);
+                    pin_mut!(swarm2_fut);
+                    match future::select(swarm1_fut, swarm2_fut).await.factor_second().0 {
+                        future::Either::Left(SwarmEvent::Behaviour(
+                            IdentifyEvent::Received { info, .. }
+                        )) => {
+                            assert_eq!(info.public_key, pubkey2);
+                            assert_eq!(info.protocol_version, "a");
+                            assert_eq!(info.agent_version, "b");
+                            assert!(!info.protocols.is_empty());
+                            assert!(info.listen_addrs.is_empty());
+                            return;
+                        }
+                        future::Either::Right(SwarmEvent::ConnectionEstablished { .. }) => {
+                            // Once a connection is established, we can initiate an
+                            // active push below.
+                        }
+                        _ => { continue }
+                    }
+                }
+
+                swarm2.behaviour_mut().push(std::iter::once(pubkey1.clone().into_peer_id()));
             }
         })
     }

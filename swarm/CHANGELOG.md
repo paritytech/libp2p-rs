@@ -1,3 +1,34 @@
+# 0.29.0 [unreleased]
+
+- Remove `Deref` and `DerefMut` implementations previously dereferencing to the
+  `NetworkBehaviour` on `Swarm`. Instead one can access the `NetworkBehaviour`
+  via `Swarm::behaviour` and `Swarm::behaviour_mut`. Methods on `Swarm` can now
+  be accessed directly, e.g. via `my_swarm.local_peer_id()`. You may use the
+  command below to transform fully qualified method calls on `Swarm` to simple
+  method calls [PR 1995](https://github.com/libp2p/rust-libp2p/pull/1995).
+  
+  ``` bash
+  # Go from e.g. `Swarm::local_peer_id(&my_swarm)` to `my_swarm.local_peer_id()`.
+  grep -RiIl --include \*.rs --exclude-dir target . --exclude-dir .git | xargs sed -i "s/\(libp2p::\)*Swarm::\([a-z_]*\)(&mut \([a-z_0-9]*\), /\3.\2(/g"
+  ```
+  
+- Extend `NetworkBehaviour` callbacks, more concretely introducing new `fn
+  inject_new_listener` and `fn inject_expired_external_addr` and have `fn
+  inject_{new,expired}_listen_addr` provide a `ListenerId` [PR
+  2011](https://github.com/libp2p/rust-libp2p/pull/2011).
+
+# 0.28.0 [2021-03-17]
+
+- New error variant `DialError::InvalidAddress`
+
+- `Swarm::dial_addr()` now returns a `DialError` on error.
+
+- Remove the option for a substream-specific multistream select protocol override.
+  The override at this granularity is no longer deemed useful, in particular because
+  it can usually not be configured for existing protocols like `libp2p-kad` and others.
+  There is a `Swarm`-scoped configuration for this version available since
+  [1858](https://github.com/libp2p/rust-libp2p/pull/1858).
+
 # 0.27.2 [2021-02-04]
 
 - Have `ToggleProtoHandler` ignore listen upgrade errors when disabled.

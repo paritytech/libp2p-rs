@@ -71,7 +71,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let mut swarm = Swarm::new(transport, behaviour, local_id);
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
-    Swarm::listen_on(&mut swarm, address.clone()).unwrap();
+    swarm.listen_on(address.clone()).unwrap();
 
     (address, swarm)
 }
@@ -95,13 +95,13 @@ fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaCon
 {
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_ids: Vec<_> = swarms.iter()
-        .map(|(addr, swarm)| (addr.clone(), Swarm::local_peer_id(swarm).clone()))
+        .map(|(addr, swarm)| (addr.clone(), *swarm.local_peer_id()))
         .collect();
 
     let mut i = 0;
     for (j, (addr, peer_id)) in swarm_ids.iter().enumerate().skip(1) {
         if i < swarm_ids.len() {
-            swarms[i].1.add_address(peer_id, addr.clone());
+            swarms[i].1.behaviour_mut().add_address(peer_id, addr.clone());
         }
         if j % step == 0 {
             i += step;
@@ -116,12 +116,12 @@ fn build_fully_connected_nodes_with_config(total: usize, cfg: KademliaConfig)
 {
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_addr_and_peer_id: Vec<_> = swarms.iter()
-        .map(|(addr, swarm)| (addr.clone(), Swarm::local_peer_id(swarm).clone()))
+        .map(|(addr, swarm)| (addr.clone(), *swarm.local_peer_id()))
         .collect();
 
     for (_addr, swarm) in swarms.iter_mut() {
         for (addr, peer) in &swarm_addr_and_peer_id {
-            swarm.add_address(&peer, addr.clone());
+            swarm.behaviour_mut().add_address(&peer, addr.clone());
         }
     }
 
@@ -167,12 +167,13 @@ fn bootstrap() {
         ).into_iter()
             .map(|(_a, s)| s)
             .collect::<Vec<_>>();
+
         let swarm_ids: Vec<_> = swarms.iter()
             .map(Swarm::local_peer_id)
             .cloned()
             .collect();
 
-        let qid = swarms[0].bootstrap().unwrap();
+        let qid = swarms[0].behaviour_mut().bootstrap().unwrap();
 
         // Expected known peers
         let expected_known = swarm_ids.iter().skip(1).cloned().collect::<HashSet<_>>();
@@ -196,7 +197,7 @@ fn bootstrap() {
                                 first = false;
                                 if ok.num_remaining == 0 {
                                     let mut known = HashSet::new();
-                                    for b in swarm.kbuckets.iter() {
+                                    for b in swarm.behaviour_mut().kbuckets.iter() {
                                         for e in b.iter() {
                                             known.insert(e.node.key.preimage().clone());
                                         }
@@ -240,9 +241,9 @@ fn query_iter() {
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
         let search_target_key = kbucket::Key::from(search_target);
-        let qid = swarms[0].get_closest_peers(search_target);
+        let qid = swarms[0].behaviour_mut().get_closest_peers(search_target);
 
-        match swarms[0].query(&qid) {
+        match swarms[0].behaviour_mut().query(&qid) {
             Some(q) => match q.info() {
                 QueryInfo::GetClosestPeers { key } => {
                     assert_eq!(&key[..], search_target.to_bytes().as_slice())
@@ -270,7 +271,7 @@ fn query_iter() {
                                 assert_eq!(id, qid);
                                 assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
-                                assert_eq!(swarm.queries.size(), 0);
+                                assert_eq!(swarm.behaviour_mut().queries.size(), 0);
                                 assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
                                 let key = kbucket::Key::new(ok.key);
                                 assert_eq!(expected_distances, distances(&key, ok.peers));
@@ -305,12 +306,12 @@ fn unresponsive_not_returned_direct() {
 
     // Add fake addresses.
     for _ in 0 .. 10 {
-        swarms[0].add_address(&PeerId::random(), Protocol::Udp(10u16).into());
+        swarms[0].behaviour_mut().add_address(&PeerId::random(), Protocol::Udp(10u16).into());
     }
 
     // Ask first to search a random value.
     let search_target = PeerId::random();
-    swarms[0].get_closest_peers(search_target);
+    swarms[0].behaviour_mut().get_closest_peers(search_target);
 
     block_on(
         poll_fn(move |ctx| {
@@ -347,20 +348,20 @@ fn unresponsive_not_returned_indirect() {
 
     // Add fake addresses to first.
     for _ in 0 .. 10 {
-        swarms[0].1.add_address(&PeerId::random(), multiaddr![Udp(10u16)]);
+        swarms[0].1.behaviour_mut().add_address(&PeerId::random(), multiaddr![Udp(10u16)]);
     }
 
     // Connect second to first.
-    let first_peer_id = Swarm::local_peer_id(&swarms[0].1).clone();
+    let first_peer_id = *swarms[0].1.local_peer_id();
     let first_address = swarms[0].0.clone();
-    swarms[1].1.add_address(&first_peer_id, first_address);
+    swarms[1].1.behaviour_mut().add_address(&first_peer_id, first_address);
 
     // Drop the swarm addresses.
     let mut swarms = swarms.into_iter().map(|(_addr, swarm)| swarm).collect::<Vec<_>>();
 
     // Ask second to search a random value.
     let search_target = PeerId::random();
-    swarms[1].get_closest_peers(search_target);
+    swarms[1].behaviour_mut().get_closest_peers(search_target);
 
     block_on(
         poll_fn(move |ctx| {
@@ -393,19 +394,18 @@ fn get_record_not_found() {
     let mut swarms = build_nodes(3);
 
     let swarm_ids: Vec<_> = swarms.iter()
-        .map(|(_addr, swarm)| Swarm::local_peer_id(swarm))
-        .cloned()
+        .map(|(_addr, swarm)| *swarm.local_peer_id())
         .collect();
 
     let (second, third) = (swarms[1].0.clone(), swarms[2].0.clone());
-    swarms[0].1.add_address(&swarm_ids[1], second);
-    swarms[1].1.add_address(&swarm_ids[2], third);
+    swarms[0].1.behaviour_mut().add_address(&swarm_ids[1], second);
+    swarms[1].1.behaviour_mut().add_address(&swarm_ids[2], third);
 
     // Drop the swarm addresses.
     let mut swarms = swarms.into_iter().map(|(_addr, swarm)| swarm).collect::<Vec<_>>();
 
     let target_key = record::Key::from(random_multihash());
-    let qid = swarms[0].get_record(&target_key, Quorum::One);
+    let qid = swarms[0].behaviour_mut().get_record(&target_key, Quorum::One);
 
     block_on(
         poll_fn(move |ctx| {
@@ -465,8 +465,8 @@ fn put_record() {
             let mut single_swarm = build_node_with_config(config);
             // Connect `single_swarm` to three bootnodes.
             for i in 0..3 {
-                single_swarm.1.add_address(
-                    Swarm::local_peer_id(&fully_connected_swarms[i].1),
+                single_swarm.1.behaviour_mut().add_address(
+                    fully_connected_swarms[i].1.local_peer_id(),
                     fully_connected_swarms[i].0.clone(),
                 );
             }
@@ -492,8 +492,8 @@ fn put_record() {
         // Initiate put_record queries.
         let mut qids = HashSet::new();
         for r in records.values() {
-            let qid = swarms[0].put_record(r.clone(), Quorum::All).unwrap();
-            match swarms[0].query(&qid) {
+            let qid = swarms[0].behaviour_mut().put_record(r.clone(), Quorum::All).unwrap();
+            match swarms[0].behaviour_mut().query(&qid) {
                 Some(q) => match q.info() {
                     QueryInfo::PutRecord { phase, record, .. } => {
                         assert_eq!(phase, &PutRecordPhase::GetClosestPeers);
@@ -534,7 +534,7 @@ fn put_record() {
                                     Err(e) => panic!("{:?}", e),
                                     Ok(ok) => {
                                         assert!(records.contains_key(&ok.key));
-                                        let record = swarm.store.get(&ok.key).unwrap();
+                                        let record = swarm.behaviour_mut().store.get(&ok.key).unwrap();
                                         results.push(record.into_owned());
                                     }
                                 }
@@ -561,7 +561,7 @@ fn put_record() {
                     assert_eq!(r.key, expected.key);
                     assert_eq!(r.value, expected.value);
                     assert_eq!(r.expires, expected.expires);
-                    assert_eq!(r.publisher.as_ref(), Some(Swarm::local_peer_id(&swarms[0])));
+                    assert_eq!(r.publisher, Some(*swarms[0].local_peer_id()));
 
                     let key = kbucket::Key::new(r.key.clone());
                     let mut expected = swarms.iter()
@@ -581,8 +581,8 @@ fn put_record() {
                     let actual = swarms.iter()
                         .skip(1)
                         .filter_map(|swarm|
-                            if swarm.store.get(key.preimage()).is_some() {
-                                Some(Swarm::local_peer_id(swarm).clone())
+                            if swarm.behaviour().store.get(key.preimage()).is_some() {
+                                Some(*swarm.local_peer_id())
                             } else {
                                 None
                             })
@@ -607,18 +607,18 @@ fn put_record() {
                 }
 
                 if republished {
-                    assert_eq!(swarms[0].store.records().count(), records.len());
-                    assert_eq!(swarms[0].queries.size(), 0);
+                    assert_eq!(swarms[0].behaviour_mut().store.records().count(), records.len());
+                    assert_eq!(swarms[0].behaviour_mut().queries.size(), 0);
                     for k in records.keys() {
-                        swarms[0].store.remove(&k);
+                        swarms[0].behaviour_mut().store.remove(&k);
                     }
-                    assert_eq!(swarms[0].store.records().count(), 0);
+                    assert_eq!(swarms[0].behaviour_mut().store.records().count(), 0);
                     // All records have been republished, thus the test is complete.
                     return Poll::Ready(());
                 }
 
                 // Tell the replication job to republish asap.
-                swarms[0].put_record_job.as_mut().unwrap().asap(true);
+                swarms[0].behaviour_mut().put_record_job.as_mut().unwrap().asap(true);
                 republished = true;
             })
         )
@@ -634,7 +634,7 @@ fn get_record() {
     // Let first peer know of second peer and second peer know of third peer.
     for i in 0..2 {
         let (peer_id, address) = (Swarm::local_peer_id(&swarms[i+1].1).clone(), swarms[i+1].0.clone());
-        swarms[i].1.add_address(&peer_id, address);
+        swarms[i].1.behaviour_mut().add_address(&peer_id, address);
     }
 
     // Drop the swarm addresses.
@@ -642,8 +642,10 @@ fn get_record() {
 
     let record = Record::new(random_multihash(), vec![4,5,6]);
 
-    swarms[1].store.put(record.clone()).unwrap();
-    let qid = swarms[0].get_record(&record.key, Quorum::One);
+    let expected_cache_candidate = *Swarm::local_peer_id(&swarms[1]);
+
+    swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
+    let qid = swarms[0].behaviour_mut().get_record(&record.key, Quorum::One);
 
     block_on(
         poll_fn(move |ctx| {
@@ -652,12 +654,16 @@ fn get_record() {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                            result: QueryResult::GetRecord(Ok(GetRecordOk {
+                                records, cache_candidates
+                            })),
                             ..
                         })) => {
                             assert_eq!(id, qid);
                             assert_eq!(records.len(), 1);
                             assert_eq!(records.first().unwrap().record, record);
+                            assert_eq!(cache_candidates.len(), 1);
+                            assert_eq!(cache_candidates.values().next(), Some(&expected_cache_candidate));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
@@ -685,11 +691,11 @@ fn get_record_many() {
     let record = Record::new(random_multihash(), vec![4,5,6]);
 
     for i in 0 .. num_nodes {
-        swarms[i].store.put(record.clone()).unwrap();
+        swarms[i].behaviour_mut().store.put(record.clone()).unwrap();
     }
 
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
-    let qid = swarms[0].get_record(&record.key, quorum);
+    let qid = swarms[0].behaviour_mut().get_record(&record.key, quorum);
 
     block_on(
         poll_fn(move |ctx| {
@@ -698,7 +704,7 @@ fn get_record_many() {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
                             id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                            result: QueryResult::GetRecord(Ok(GetRecordOk { records, .. })),
                             ..
                         })) => {
                             assert_eq!(id, qid);
@@ -744,8 +750,8 @@ fn add_provider() {
             let mut single_swarm = build_node_with_config(config);
             // Connect `single_swarm` to three bootnodes.
             for i in 0..3 {
-                single_swarm.1.add_address(
-                    Swarm::local_peer_id(&fully_connected_swarms[i].1),
+                single_swarm.1.behaviour_mut().add_address(
+                    fully_connected_swarms[i].1.local_peer_id(),
                     fully_connected_swarms[i].0.clone(),
                 );
             }
@@ -768,7 +774,7 @@ fn add_provider() {
         // Initiate the first round of publishing.
         let mut qids = HashSet::new();
         for k in &keys {
-            let qid = swarms[0].start_providing(k.clone()).unwrap();
+            let qid = swarms[0].behaviour_mut().start_providing(k.clone()).unwrap();
             qids.insert(qid);
         }
 
@@ -818,7 +824,7 @@ fn add_provider() {
                     // Collect the nodes that have a provider record for `key`.
                     let actual = swarms.iter().skip(1)
                         .filter_map(|swarm|
-                            if swarm.store.providers(&key).len() == 1 {
+                            if swarm.behaviour().store.providers(&key).len() == 1 {
                                 Some(Swarm::local_peer_id(&swarm).clone())
                             } else {
                                 None
@@ -852,22 +858,22 @@ fn add_provider() {
                 // One round of publishing is complete.
                 assert!(results.is_empty());
                 for swarm in &swarms {
-                    assert_eq!(swarm.queries.size(), 0);
+                    assert_eq!(swarm.behaviour().queries.size(), 0);
                 }
 
                 if republished {
-                    assert_eq!(swarms[0].store.provided().count(), keys.len());
+                    assert_eq!(swarms[0].behaviour_mut().store.provided().count(), keys.len());
                     for k in &keys {
-                        swarms[0].stop_providing(&k);
+                        swarms[0].behaviour_mut().stop_providing(&k);
                     }
-                    assert_eq!(swarms[0].store.provided().count(), 0);
+                    assert_eq!(swarms[0].behaviour_mut().store.provided().count(), 0);
                     // All records have been republished, thus the test is complete.
                     return Poll::Ready(());
                 }
 
                 // Initiate the second round of publishing by telling the
                 // periodic provider job to run asap.
-                swarms[0].add_provider_job.as_mut().unwrap().asap();
+                swarms[0].behaviour_mut().add_provider_job.as_mut().unwrap().asap();
                 published = false;
                 republished = true;
             })
@@ -885,10 +891,10 @@ fn exceed_jobs_max_queries() {
     let (_addr, mut swarm) = build_node();
     let num = JOBS_MAX_QUERIES + 1;
     for _ in 0 .. num {
-        swarm.get_closest_peers(PeerId::random());
+        swarm.behaviour_mut().get_closest_peers(PeerId::random());
     }
 
-    assert_eq!(swarm.queries.size(), num);
+    assert_eq!(swarm.behaviour_mut().queries.size(), num);
 
     block_on(
         poll_fn(move |ctx| {
@@ -940,18 +946,18 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 
     // Make `bob` and `trudy` aware of their version of the record searched by
     // `alice`.
-    bob.1.store.put(record_bob.clone()).unwrap();
-    trudy.1.store.put(record_trudy.clone()).unwrap();
+    bob.1.behaviour_mut().store.put(record_bob.clone()).unwrap();
+    trudy.1.behaviour_mut().store.put(record_trudy.clone()).unwrap();
 
     // Make `trudy` and `bob` known to `alice`.
-    alice.1.add_address(Swarm::local_peer_id(&trudy.1), trudy.0.clone());
-    alice.1.add_address(Swarm::local_peer_id(&bob.1), bob.0.clone());
+    alice.1.behaviour_mut().add_address(&trudy.1.local_peer_id(), trudy.0.clone());
+    alice.1.behaviour_mut().add_address(&bob.1.local_peer_id(), bob.0.clone());
 
     // Drop the swarm addresses.
     let (mut alice, mut bob, mut trudy) = (alice.1, bob.1, trudy.1);
 
     // Have `alice` query the Dht for `key` with a quorum of 1.
-    alice.get_record(&key, Quorum::One);
+    alice.behaviour_mut().get_record(&key, Quorum::One);
 
     // The default peer timeout is 10 seconds. Choosing 1 seconds here should
     // give enough head room to prevent connections to `bob` to time out.
@@ -994,8 +1000,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     );
 
     // Make sure `alice` has exactly one query with `trudy`'s record only.
-    assert_eq!(1, alice.queries.iter().count());
-    alice.queries.iter().for_each(|q| {
+    assert_eq!(1, alice.behaviour().queries.iter().count());
+    alice.behaviour().queries.iter().for_each(|q| {
         match &q.inner.info {
             QueryInfo::GetRecord{ records, .. }  => {
                 assert_eq!(
@@ -1065,14 +1071,18 @@ fn manual_bucket_inserts() {
     let mut swarms = build_connected_nodes_with_config(3, 1, cfg);
     // The peers and their addresses for which we expect `RoutablePeer` events.
     let mut expected = swarms.iter().skip(2)
-        .map(|(a, s)| (a.clone(), Swarm::local_peer_id(s).clone()))
+        .map(|(a, s)| {
+            let pid = *Swarm::local_peer_id(s);
+            let addr = a.clone().with(Protocol::P2p(pid.into()));
+            (addr, pid)
+        })
         .collect::<HashMap<_,_>>();
     // We collect the peers for which a `RoutablePeer` event
     // was received in here to check at the end of the test
     // that none of them was inserted into a bucket.
     let mut routable = Vec::new();
     // Start an iterative query from the first peer.
-    swarms[0].1.get_closest_peers(PeerId::random());
+    swarms[0].1.behaviour_mut().get_closest_peers(PeerId::random());
     block_on(poll_fn(move |ctx| {
         for (_, swarm) in swarms.iter_mut() {
             loop {
@@ -1080,11 +1090,11 @@ fn manual_bucket_inserts() {
                     Poll::Ready(Some(KademliaEvent::RoutablePeer {
                         peer, address
                     })) => {
-                        assert_eq!(peer, expected.remove(&address).expect("Unexpected address"));
+                        assert_eq!(peer, expected.remove(&address).expect("Missing address"));
                         routable.push(peer);
                         if expected.is_empty() {
                             for peer in routable.iter() {
-                                let bucket = swarm.kbucket(*peer).unwrap();
+                                let bucket = swarm.behaviour_mut().kbucket(*peer).unwrap();
                                 assert!(bucket.iter().all(|e| e.node.key.preimage() != peer));
                             }
                             return Poll::Ready(())

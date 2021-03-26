@@ -1,3 +1,19 @@
+# 0.29.0 [unreleased]
+
+- Add support for configurable automatic push to connected peers
+  on listen addr changes. Disabled by default.
+  [PR 2004](https://github.com/libp2p/rust-libp2p/pull/2004)
+
+- Implement the `/ipfs/id/push/1.0.0` protocol.
+  cf. https://github.com/libp2p/specs/tree/master/identify#identifypush
+  [PR 1999](https://github.com/libp2p/rust-libp2p/pull/1999)
+
+# 0.28.0 [2021-03-17]
+
+- Update `libp2p-swarm`.
+
+- Update dependencies.
+
 # 0.27.0 [2021-01-12]
 
 - Update dependencies.

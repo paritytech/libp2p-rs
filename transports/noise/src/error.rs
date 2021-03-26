@@ -24,6 +24,7 @@ use std::{error::Error, fmt, io};
 
 /// libp2p_noise error type.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum NoiseError {
     /// An I/O error has been encountered.
     Io(io::Error),
@@ -38,8 +39,6 @@ pub enum NoiseError {
     InvalidPayload(prost::DecodeError),
     /// A signature was required and could not be created.
     SigningError(identity::error::SigningError),
-    #[doc(hidden)]
-    __Nonexhaustive
 }
 
 impl fmt::Display for NoiseError {
@@ -51,7 +50,6 @@ impl fmt::Display for NoiseError {
             NoiseError::InvalidPayload(e) => write!(f, "{}", e),
             NoiseError::AuthenticationFailed => f.write_str("Authentication failed"),
             NoiseError::SigningError(e) => write!(f, "{}", e),
-            NoiseError::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
     }
 }
@@ -65,7 +63,6 @@ impl Error for NoiseError {
             NoiseError::AuthenticationFailed => None,
             NoiseError::InvalidPayload(e) => Some(e),
             NoiseError::SigningError(e) => Some(e),
-            NoiseError::__Nonexhaustive => None
         }
     }
 }

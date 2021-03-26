@@ -531,7 +531,7 @@ where
             }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
                 let msg = KadRequestMsg::FindNode { key };
-                self.substreams.push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
+                self.substreams.push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
             }
             KademliaHandlerIn::FindNodeRes {
                 closer_peers,
@@ -550,7 +550,7 @@ where
                     };
 
                     let msg = KadResponseMsg::FindNode {
-                        closer_peers: closer_peers.clone(),
+                        closer_peers,
                     };
                     self.substreams
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));
@@ -559,7 +559,7 @@ where
             KademliaHandlerIn::GetProvidersReq { key, user_data } => {
                 let msg = KadRequestMsg::GetProviders { key };
                 self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
+                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
             }
             KademliaHandlerIn::GetProvidersRes {
                 closer_peers,
@@ -582,8 +582,8 @@ where
                     };
 
                     let msg = KadResponseMsg::GetProviders {
-                        closer_peers: closer_peers.clone(),
-                        provider_peers: provider_peers.clone(),
+                        closer_peers,
+                        provider_peers,
                     };
                     self.substreams
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));
@@ -622,7 +622,7 @@ where
 
                     let msg = KadResponseMsg::GetValue {
                         record,
-                        closer_peers: closer_peers.clone(),
+                        closer_peers,
                     };
                     self.substreams
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));

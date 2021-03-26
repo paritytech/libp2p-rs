@@ -45,7 +45,7 @@ use std::{
     error,
     fmt,
 };
-use super::{Network, DialingOpts};
+use super::{Network, DialingOpts, DialError};
 
 /// The possible representations of a peer in a [`Network`], as
 /// seen by the local node.
@@ -210,7 +210,7 @@ where
     pub fn dial<I>(self, address: Multiaddr, remaining: I, handler: THandler)
         -> Result<
             (ConnectionId, DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler>),
-            ConnectionLimit
+            DialError
         >
     where
         I: IntoIterator<Item = Multiaddr>,
@@ -219,11 +219,13 @@ where
             Peer::Connected(p) => (p.peer_id, p.network),
             Peer::Dialing(p) => (p.peer_id, p.network),
             Peer::Disconnected(p) => (p.peer_id, p.network),
-            Peer::Local => return Err(ConnectionLimit { current: 0, limit: 0 })
+            Peer::Local => return Err(DialError::ConnectionLimit(ConnectionLimit {
+                current: 0, limit: 0
+            }))
         };
 
         let id = network.dial_peer(DialingOpts {
-            peer: peer_id.clone(),
+            peer: peer_id,
             handler,
             address,
             remaining: remaining.into_iter().collect(),
@@ -435,7 +437,7 @@ where
     pub fn attempt(&mut self, id: ConnectionId)
         -> Option<DialingAttempt<'_, TInEvent>>
     {
-        if let hash_map::Entry::Occupied(attempts) = self.network.dialing.entry(self.peer_id.clone()) {
+        if let hash_map::Entry::Occupied(attempts) = self.network.dialing.entry(self.peer_id) {
             if let Some(pos) = attempts.get().iter().position(|s| s.current.0 == id) {
                 if let Some(inner) = self.network.pool.get_outgoing(id) {
                     return Some(DialingAttempt { pos, inner, attempts })
@@ -662,7 +664,8 @@ impl<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
     }
 
     /// Obtains the next dialing connection, if any.
-    pub fn next<'b>(&'b mut self) -> Option<DialingAttempt<'b, TInEvent>> {
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Option<DialingAttempt<'_, TInEvent>> {
         // If the number of elements reduced, the current `DialingAttempt` has been
         // aborted and iteration needs to continue from the previous position to
         // account for the removed element.
@@ -676,7 +679,7 @@ impl<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
             return None
         }
 
-        if let hash_map::Entry::Occupied(attempts) = self.dialing.entry(self.peer_id.clone()) {
+        if let hash_map::Entry::Occupied(attempts) = self.dialing.entry(*self.peer_id) {
             let id = attempts.get()[self.pos].current.0;
             if let Some(inner) = self.pool.get_outgoing(id) {
                 let conn = DialingAttempt { pos: self.pos, inner, attempts };
@@ -697,7 +700,7 @@ impl<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
             return None
         }
 
-        if let hash_map::Entry::Occupied(attempts) = self.dialing.entry(self.peer_id.clone()) {
+        if let hash_map::Entry::Occupied(attempts) = self.dialing.entry(*self.peer_id) {
             let id = attempts.get()[self.pos].current.0;
             if let Some(inner) = self.pool.get_outgoing(id) {
                 return Some(DialingAttempt { pos: self.pos, inner, attempts })

@@ -83,7 +83,7 @@ impl GossipPromises {
         self.promises.retain(|msg, peers| {
             peers.retain(|peer_id, expires| {
                 if *expires < now {
-                    let count = result.entry(peer_id.clone()).or_insert(0);
+                    let count = result.entry(*peer_id).or_insert(0);
                     *count += 1;
                     debug!(
                         "The peer {} broke the promise to deliver message {} in time!",

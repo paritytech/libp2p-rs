@@ -78,7 +78,7 @@ impl BackoffStorage {
              backoffs_by_heartbeat: &mut Vec<HashSet<_>>,
              heartbeat_interval,
              backoff_slack| {
-                let pair = (topic.clone(), peer.clone());
+                let pair = (topic.clone(), *peer);
                 let index = (heartbeat_index.0
                     + Self::heartbeats(&time, heartbeat_interval)
                     + backoff_slack as usize)
@@ -90,12 +90,12 @@ impl BackoffStorage {
             .backoffs
             .entry(topic.clone())
             .or_insert_with(HashMap::new)
-            .entry(peer.clone())
+            .entry(*peer)
         {
             Entry::Occupied(mut o) => {
                 let (backoff, index) = o.get();
                 if backoff < &instant {
-                    let pair = (topic.clone(), peer.clone());
+                    let pair = (topic.clone(), *peer);
                     if let Some(s) = self.backoffs_by_heartbeat.get_mut(index.0) {
                         s.remove(&pair);
                     }

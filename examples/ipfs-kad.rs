@@ -25,10 +25,11 @@
 
 use async_std::task;
 use libp2p::{
+    Multiaddr,
     Swarm,
     PeerId,
     identity,
-    build_development_transport
+    development_transport
 };
 use libp2p::kad::{
     Kademlia,
@@ -38,9 +39,17 @@ use libp2p::kad::{
     QueryResult,
 };
 use libp2p::kad::record::store::MemoryStore;
-use std::{env, error::Error, time::Duration};
+use std::{env, error::Error, str::FromStr, time::Duration};
 
-fn main() -> Result<(), Box<dyn Error>> {
+const BOOTNODES: [&'static str; 4] = [
+    "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+    "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+    "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+    "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt"
+];
+
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random key for ourselves.
@@ -48,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
-    let transport = build_development_transport(local_key)?;
+    let transport = development_transport(local_key).await?;
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
@@ -58,28 +67,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         let store = MemoryStore::new(local_peer_id.clone());
         let mut behaviour = Kademlia::with_config(local_peer_id.clone(), store, cfg);
 
-        // TODO: the /dnsaddr/ scheme is not supported (https://github.com/libp2p/rust-libp2p/issues/967)
-        /*behaviour.add_address(&"QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());
-        behaviour.add_address(&"QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());
-        behaviour.add_address(&"QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());
-        behaviour.add_address(&"QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());*/
+        // Add the bootnodes to the local routing table. `libp2p-dns` built
+        // into the `transport` resolves the `dnsaddr` when Kademlia tries
+        // to dial these nodes.
+        let bootaddr = Multiaddr::from_str("/dnsaddr/bootstrap.libp2p.io")?;
+        for peer in &BOOTNODES {
+            behaviour.add_address(&PeerId::from_str(peer)?, bootaddr.clone());
+        }
 
-        // The only address that currently works.
-        behaviour.add_address(&"QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse()?, "/ip4/104.131.131.82/tcp/4001".parse()?);
-
-        // The following addresses always fail signature verification, possibly due to
-        // RSA keys with < 2048 bits.
-        // behaviour.add_address(&"QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM".parse().unwrap(), "/ip4/104.236.179.241/tcp/4001".parse().unwrap());
-        // behaviour.add_address(&"QmSoLSafTMBsPKadTEgaXctDQVcqN88CNLHXMkTNwMKPnu".parse().unwrap(), "/ip4/128.199.219.111/tcp/4001".parse().unwrap());
-        // behaviour.add_address(&"QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64".parse().unwrap(), "/ip4/104.236.76.40/tcp/4001".parse().unwrap());
-        // behaviour.add_address(&"QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd".parse().unwrap(), "/ip4/178.62.158.247/tcp/4001".parse().unwrap());
-
-        // The following addresses are permanently unreachable:
-        // Other(Other(A(Transport(A(Underlying(Os { code: 101, kind: Other, message: "Network is unreachable" }))))))
-        // behaviour.add_address(&"QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM".parse().unwrap(), "/ip6/2604:a880:1:20::203:d001/tcp/4001".parse().unwrap());
-        // behaviour.add_address(&"QmSoLSafTMBsPKadTEgaXctDQVcqN88CNLHXMkTNwMKPnu".parse().unwrap(), "/ip6/2400:6180:0:d0::151:6001/tcp/4001".parse().unwrap());
-        // behaviour.add_address(&"QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64".parse().unwrap(), "/ip6/2604:a880:800:10::4a:5001/tcp/4001".parse().unwrap());
-        // behaviour.add_address(&"QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd".parse().unwrap(), "/ip6/2a03:b0c0:0:1010::23:1001/tcp/4001".parse().unwrap());
         Swarm::new(transport, behaviour, local_peer_id)
     };
 
@@ -91,7 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     println!("Searching for the closest peers to {:?}", to_search);
-    swarm.get_closest_peers(to_search);
+    swarm.behaviour_mut().get_closest_peers(to_search);
 
     // Kick it off!
     task::block_on(async move {

@@ -55,7 +55,7 @@ use libp2p_core::{
     ConnectedPoint,
     Multiaddr,
     PeerId,
-    upgrade::{self, UpgradeError},
+    upgrade::UpgradeError,
 };
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
@@ -242,7 +242,6 @@ pub trait ProtocolsHandler: Send + 'static {
 pub struct SubstreamProtocol<TUpgrade, TInfo> {
     upgrade: TUpgrade,
     info: TInfo,
-    upgrade_protocol: upgrade::Version,
     timeout: Duration,
 }
 
@@ -255,16 +254,8 @@ impl<TUpgrade, TInfo> SubstreamProtocol<TUpgrade, TInfo> {
         SubstreamProtocol {
             upgrade,
             info,
-            upgrade_protocol: upgrade::Version::V1,
             timeout: Duration::from_secs(10),
         }
-    }
-
-    /// Sets the multistream-select protocol (version) to use for negotiating
-    /// protocols upgrades on outbound substreams.
-    pub fn with_upgrade_protocol(mut self, version: upgrade::Version) -> Self {
-        self.upgrade_protocol = version;
-        self
     }
 
     /// Maps a function over the protocol upgrade.
@@ -275,7 +266,6 @@ impl<TUpgrade, TInfo> SubstreamProtocol<TUpgrade, TInfo> {
         SubstreamProtocol {
             upgrade: f(self.upgrade),
             info: self.info,
-            upgrade_protocol: self.upgrade_protocol,
             timeout: self.timeout,
         }
     }
@@ -288,7 +278,6 @@ impl<TUpgrade, TInfo> SubstreamProtocol<TUpgrade, TInfo> {
         SubstreamProtocol {
             upgrade: self.upgrade,
             info: f(self.info),
-            upgrade_protocol: self.upgrade_protocol,
             timeout: self.timeout,
         }
     }
@@ -315,8 +304,8 @@ impl<TUpgrade, TInfo> SubstreamProtocol<TUpgrade, TInfo> {
     }
 
     /// Converts the substream protocol configuration into the contained upgrade.
-    pub fn into_upgrade(self) -> (upgrade::Version, TUpgrade, TInfo) {
-        (self.upgrade_protocol, self.upgrade, self.info)
+    pub fn into_upgrade(self) -> (TUpgrade, TInfo) {
+        (self.upgrade, self.info)
     }
 }
 
@@ -512,7 +501,7 @@ where T: ProtocolsHandler
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        self.listen_protocol().into_upgrade().1
+        self.listen_protocol().into_upgrade().0
     }
 }
 

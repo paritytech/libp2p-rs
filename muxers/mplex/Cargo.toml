@@ -2,7 +2,7 @@
 name = "libp2p-mplex"
 edition = "2018"
 description = "Mplex multiplexing protocol for libp2p"
-version = "0.27.0"
+version = "0.28.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,14 +12,14 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 bytes = "1"
 futures = "0.3.1"
-asynchronous-codec = "0.5.0"
-libp2p-core = { version = "0.27.0", path = "../../core" }
+asynchronous-codec = "0.6"
+libp2p-core = { version = "0.28.0", path = "../../core" }
 log = "0.4"
 nohash-hasher = "0.2"
 parking_lot = "0.11"
 rand = "0.7"
-smallvec = "1.4"
-unsigned-varint = { version = "0.6", features = ["asynchronous_codec"] }
+smallvec = "1.6.1"
+unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [dev-dependencies]
 async-std = "1.7.0"

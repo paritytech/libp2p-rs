@@ -116,7 +116,7 @@ where
     >>,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
-    queued_dial_upgrades: Vec<(u64, (upgrade::Version, SendWrapper<TProtoHandler::OutboundProtocol>))>,
+    queued_dial_upgrades: Vec<(u64, SendWrapper<TProtoHandler::OutboundProtocol>)>,
     /// Unique identifier assigned to each queued dial upgrade.
     unique_dial_upgrade_id: u64,
     /// The currently planned connection & handler shutdown.
@@ -245,8 +245,8 @@ where
         match endpoint {
             SubstreamEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
-                let timeout = protocol.timeout().clone();
-                let (_, upgrade, user_data) = protocol.into_upgrade();
+                let timeout = *protocol.timeout();
+                let (upgrade, user_data) = protocol.into_upgrade();
                 let upgrade = upgrade::apply_inbound(substream, SendWrapper(upgrade));
                 let timeout = Delay::new(timeout);
                 self.negotiating_in.push(SubstreamUpgrade {
@@ -268,7 +268,8 @@ where
                     }
                 };
 
-                let (_, (mut version, upgrade)) = self.queued_dial_upgrades.remove(pos);
+                let (_, upgrade) = self.queued_dial_upgrades.remove(pos);
+                let mut version = upgrade::Version::default();
                 if let Some(v) = self.substream_upgrade_protocol_override {
                     if v != version {
                         log::debug!("Substream upgrade protocol override: {:?} -> {:?}", version, v);
@@ -334,10 +335,10 @@ where
             }
             Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 let id = self.unique_dial_upgrade_id;
-                let timeout = protocol.timeout().clone();
+                let timeout = *protocol.timeout();
                 self.unique_dial_upgrade_id += 1;
-                let (version, upgrade, info) = protocol.into_upgrade();
-                self.queued_dial_upgrades.push((id, (version, SendWrapper(upgrade))));
+                let (upgrade, info) = protocol.into_upgrade();
+                self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
                 return Poll::Ready(Ok(
                     ConnectionHandlerEvent::OutboundSubstreamRequest((id, info, timeout)),
                 ));

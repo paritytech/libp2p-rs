@@ -1,3 +1,15 @@
+# 0.28.0 [2021-03-17]
+
+- Update `libp2p-core`.
+
+- Permit `/p2p` addresses.
+
+- Update to `if-watch-0.2`.
+
+# 0.27.1 [2021-02-15]
+
+- Update dependencies.
+
 # 0.27.0 [2021-01-12]
 
 - Add support for port reuse and (re)add transport-specific

@@ -44,6 +44,13 @@ pub struct WsConfig<T> {
 
 impl<T> WsConfig<T> {
     /// Create a new websocket transport based on the given transport.
+    ///
+    /// > **Note*: The given transport must be based on TCP/IP and should
+    /// > usually incorporate DNS resolution, though the latter is not
+    /// > strictly necessary if one wishes to only use the `Ws` protocol
+    /// > with known IP addresses and ports. See [`libp2p-tcp`](https://docs.rs/libp2p-tcp/)
+    /// > and [`libp2p-dns`](https://docs.rs/libp2p-dns) for constructing
+    /// > the inner transport.
     pub fn new(transport: T) -> Self {
         framed::WsConfig::new(transport).into()
     }
@@ -187,10 +194,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use libp2p_core::Multiaddr;
+    use libp2p_core::{Multiaddr, PeerId, Transport, multiaddr::Protocol};
     use libp2p_tcp as tcp;
     use futures::prelude::*;
-    use libp2p_core::{Transport, multiaddr::Protocol};
     use super::WsConfig;
 
     #[test]
@@ -230,7 +236,7 @@ mod tests {
             conn.await
         };
 
-        let outbound = ws_config.dial(addr).unwrap();
+        let outbound = ws_config.dial(addr.with(Protocol::P2p(PeerId::random().into()))).unwrap();
 
         let (a, b) = futures::join!(inbound, outbound);
         a.and(b).unwrap();

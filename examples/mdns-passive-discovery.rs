@@ -18,43 +18,42 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_std::task;
-use libp2p::mdns::service::{MdnsPacket, MdnsService};
+use libp2p::{identity, mdns::{Mdns, MdnsConfig, MdnsEvent}, PeerId, Swarm};
 use std::error::Error;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // This example provides passive discovery of the libp2p nodes on the
-    // network that send mDNS queries and answers.
-    task::block_on(async move {
-        let mut service = MdnsService::new().await?;
-        loop {
-            let (srv, packet) = service.next().await;
-            match packet {
-                MdnsPacket::Query(query) => {
-                    // We detected a libp2p mDNS query on the network. In a real application, you
-                    // probably want to answer this query by doing `query.respond(...)`.
-                    println!("Detected query from {:?}", query.remote_addr());
-                }
-                MdnsPacket::Response(response) => {
-                    // We detected a libp2p mDNS response on the network. Responses are for
-                    // everyone and not just for the requester, which makes it possible to
-                    // passively listen.
-                    for peer in response.discovered_peers() {
-                        println!("Discovered peer {:?}", peer.id());
-                        // These are the self-reported addresses of the peer we just discovered.
-                        for addr in peer.addresses() {
-                            println!(" Address = {:?}", addr);
-                        }
-                    }
-                }
-                MdnsPacket::ServiceDiscovery(query) => {
-                    // The last possibility is a service detection query from DNS-SD.
-                    // Just like `Query`, in a real application you probably want to call
-                    // `query.respond`.
-                    println!("Detected service query from {:?}", query.remote_addr());
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init();
+
+    // Create a random PeerId.
+    let id_keys = identity::Keypair::generate_ed25519();
+    let peer_id = PeerId::from(id_keys.public());
+    println!("Local peer id: {:?}", peer_id);
+
+    // Create a transport.
+    let transport = libp2p::development_transport(id_keys).await?;
+
+    // Create an MDNS network behaviour.
+    let behaviour = Mdns::new(MdnsConfig::default()).await?;
+
+    // Create a Swarm that establishes connections through the given transport.
+    // Note that the MDNS behaviour itself will not actually inititiate any connections,
+    // as it only uses UDP.
+    let mut swarm = Swarm::new(transport, behaviour, peer_id);
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+
+    loop {
+        match swarm.next().await {
+            MdnsEvent::Discovered(peers) => {
+                for (peer, addr) in peers {
+                    println!("discovered {} {}", peer, addr);
                 }
             }
-            service = srv
+            MdnsEvent::Expired(expired) => {
+                for (peer, addr) in expired {
+                    println!("expired {} {}", peer, addr);
+                }
+            }
         }
-    })
+    }
 }

@@ -1,4 +1,3 @@
-
 # Individual crates
 
 ## Main APIs
@@ -15,6 +14,7 @@
 - [`libp2p-kad` CHANGELOG](protocols/kad/CHANGELOG.md)
 - [`libp2p-mdns` CHANGELOG](protocols/mdns/CHANGELOG.md)
 - [`libp2p-ping` CHANGELOG](protocols/ping/CHANGELOG.md)
+- [`libp2p-relay` CHANGELOG](protocols/relay/CHANGELOG.md)
 - [`libp2p-request-response` CHANGELOG](protocols/request-response/CHANGELOG.md)
 
 ## Transport Protocols & Upgrades
@@ -41,11 +41,46 @@
 
 # `libp2p` facade crate
 
-## Version 0.35.0 [unreleased]
+## Version 0.37.0 [unreleased]
+
+- Update individual crates.
+    - `libp2p-core`
+    - `libp2p-dns`
+    - `libp2p-floodsub`
+    - `libp2p-gossipsub`
+    - `libp2p-kad`
+    - `libp2p-mdns`
+    - `libp2p-ping`
+    - `libp2p-relay`
+    - `libp2p-request-response`
+    - `libp2p-swarm`
+
+## Version 0.36.0 [2021-03-17]
+
+- Consolidate top-level utility functions for constructing development
+  transports. There is now just `development_transport()` (available with default features)
+  and `tokio_development_transport()` (available when the corresponding tokio features are enabled).
+  Furthermore, these are now `async fn`s. The minor variations that also included `pnet`
+  support have been removed.
+  [PR 1927](https://github.com/libp2p/rust-libp2p/pull/1927)
+
+- Update libp2p crates.
+
+- Do not leak default features from libp2p crates.
+  [PR 1986](https://github.com/libp2p/rust-libp2p/pull/1986).
+
+- Add `libp2p-relay` to `libp2p` facade crate.
+
+## Version 0.35.1 [2021-02-17]
+
+- Update `libp2p-yamux` to latest patch version.
+
+## Version 0.35.0 [2021-02-15]
 
 - Use `libp2p-swarm-derive`, the former `libp2p-core-derive`.
 
-- Update `libp2p-gossipsub`, `libp2p-request-response` and `libp2p-swarm`.
+- Update `libp2p-deflate`, `libp2p-gossipsub`, `libp2p-mdns`, `libp2p-request-response`,
+  `libp2p-swarm` and `libp2p-tcp`.
 
 ## Version 0.34.0 [2021-01-12]
 

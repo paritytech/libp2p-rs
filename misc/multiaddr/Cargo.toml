@@ -6,7 +6,7 @@ description = "Implementation of the multiaddr format"
 homepage = "https://github.com/libp2p/rust-libp2p"
 keywords = ["multiaddr", "ipfs"]
 license = "MIT"
-version = "0.11.0"
+version = "0.11.2"
 
 [features]
 default = ["url"]
@@ -20,7 +20,7 @@ multihash = { version = "0.13", default-features = false, features = ["std", "mu
 percent-encoding = "2.1.0"
 serde = "1.0.70"
 static_assertions = "1.1"
-unsigned-varint = "0.6"
+unsigned-varint = "0.7"
 url = { version = "2.1.0", optional = true, default-features = false }
 
 [dev-dependencies]

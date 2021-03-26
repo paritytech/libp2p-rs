@@ -56,7 +56,7 @@ fn ping_pong() {
 
         let pid1 = peer1_id.clone();
         let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-        Swarm::listen_on(&mut swarm1, addr).unwrap();
+        swarm1.listen_on(addr).unwrap();
 
         let mut count1 = count.get();
         let mut count2 = count.get();
@@ -79,7 +79,7 @@ fn ping_pong() {
 
         let pid2 = peer2_id.clone();
         let peer2 = async move {
-            Swarm::dial_addr(&mut swarm2, rx.next().await.unwrap()).unwrap();
+            swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
 
             loop {
                 match swarm2.next().await {
@@ -124,7 +124,7 @@ fn max_failures() {
         let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
         let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-        Swarm::listen_on(&mut swarm1, addr).unwrap();
+        swarm1.listen_on(addr).unwrap();
 
         let peer1 = async move {
             let mut count1: u8 = 0;
@@ -151,7 +151,7 @@ fn max_failures() {
         };
 
         let peer2 = async move {
-            Swarm::dial_addr(&mut swarm2, rx.next().await.unwrap()).unwrap();
+            swarm2.dial_addr(rx.next().await.unwrap()).unwrap();
 
             let mut count2: u8 = 0;
 

@@ -106,7 +106,7 @@ where
         -> Poll<Result<Self::Substream, io::Error>>
     {
         let stream_id = ready!(self.io.lock().poll_open_stream(cx))?;
-        return Poll::Ready(Ok(Substream::new(stream_id)))
+        Poll::Ready(Ok(Substream::new(stream_id)))
     }
 
     fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {

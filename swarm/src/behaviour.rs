@@ -82,21 +82,21 @@ pub trait NetworkBehaviour: Send + 'static {
     /// address should be the most likely to be reachable.
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr>;
 
-    /// Indicates the behaviour that we connected to the node with the given peer id.
+    /// Indicate to the behaviour that we connected to the node with the given peer id.
     ///
     /// This node now has a handler (as spawned by `new_handler`) running in the background.
     ///
-    /// This method is only called when the connection to the peer is
-    /// established, preceded by `inject_connection_established`.
+    /// This method is only called when the first connection to the peer is established, preceded by
+    /// [`inject_connection_established`](NetworkBehaviour::inject_connection_established).
     fn inject_connected(&mut self, peer_id: &PeerId);
 
-    /// Indicates the behaviour that we disconnected from the node with the given peer id.
+    /// Indicates to the behaviour that we disconnected from the node with the given peer id.
     ///
     /// There is no handler running anymore for this node. Any event that has been sent to it may
     /// or may not have been processed by the handler.
     ///
-    /// This method is only called when the last established connection to the peer
-    /// is closed, preceded by `inject_connection_closed`.
+    /// This method is only called when the last established connection to the peer is closed,
+    /// preceded by [`inject_connection_closed`](NetworkBehaviour::inject_connection_closed).
     fn inject_disconnected(&mut self, peer_id: &PeerId);
 
     /// Informs the behaviour about a newly established connection to a peer.
@@ -147,17 +147,17 @@ pub trait NetworkBehaviour: Send + 'static {
     fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
     }
 
+    /// Indicates to the behaviour that a new listener was created.
+    fn inject_new_listener(&mut self, _id: ListenerId) {
+    }
+
     /// Indicates to the behaviour that we have started listening on a new multiaddr.
-    fn inject_new_listen_addr(&mut self, _addr: &Multiaddr) {
+    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
     }
 
-    /// Indicates to the behaviour that a new multiaddr we were listening on has expired,
+    /// Indicates to the behaviour that a multiaddr we were listening on has expired,
     /// which means that we are no longer listening in it.
-    fn inject_expired_listen_addr(&mut self, _addr: &Multiaddr) {
-    }
-
-    /// Indicates to the behaviour that we have discovered a new external address for us.
-    fn inject_new_external_addr(&mut self, _addr: &Multiaddr) {
+    fn inject_expired_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
     }
 
     /// A listener experienced an error.
@@ -166,6 +166,14 @@ pub trait NetworkBehaviour: Send + 'static {
 
     /// A listener closed.
     fn inject_listener_closed(&mut self, _id: ListenerId, _reason: Result<(), &std::io::Error>) {
+    }
+
+    /// Indicates to the behaviour that we have discovered a new external address for us.
+    fn inject_new_external_addr(&mut self, _addr: &Multiaddr) {
+    }
+
+    /// Indicates to the behaviour that an external address was removed.
+    fn inject_expired_external_addr(&mut self, _addr: &Multiaddr) {
     }
 
     /// Polls for things that swarm should do.

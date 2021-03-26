@@ -102,8 +102,18 @@ impl From<SecretKey> for Keypair {
 }
 
 /// An Ed25519 public key.
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct PublicKey(ed25519::PublicKey);
+
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PublicKey(compressed): ")?;
+        for byte in self.0.as_bytes() {
+            write!(f, "{:x}", byte)?;
+        }
+        Ok(())
+    }
+}
 
 impl PublicKey {
     /// Verify the Ed25519 signature on a message using the public key.

@@ -170,7 +170,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
 
     let port = 1 + random::<u64>();
     let mut addr: Multiaddr = Protocol::Memory(port).into();
-    Swarm::listen_on(&mut swarm, addr.clone()).unwrap();
+    swarm.listen_on(addr.clone()).unwrap();
 
     addr = addr.with(libp2p_core::multiaddr::Protocol::P2p(
         public_key.into_peer_id().into(),
@@ -196,7 +196,7 @@ fn multi_hop_propagation() {
         // Subscribe each node to the same topic.
         let topic = Topic::new("test-net");
         for (_addr, node) in &mut graph.nodes {
-            node.subscribe(&topic).unwrap();
+            node.behaviour_mut().subscribe(&topic).unwrap();
         }
 
         // Wait for all nodes to be subscribed.
@@ -223,7 +223,7 @@ fn multi_hop_propagation() {
         graph = graph.drain_poll();
 
         // Publish a single message.
-        graph.nodes[0].1.publish(topic, vec![1, 2, 3]).unwrap();
+        graph.nodes[0].1.behaviour_mut().publish(topic, vec![1, 2, 3]).unwrap();
 
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;

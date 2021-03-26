@@ -207,9 +207,9 @@ impl<TInner> QueryPool<TInner> {
         }
 
         if self.queries.is_empty() {
-            return QueryPoolState::Idle
+            QueryPoolState::Idle
         } else {
-            return QueryPoolState::Waiting(None)
+            QueryPoolState::Waiting(None)
         }
     }
 }

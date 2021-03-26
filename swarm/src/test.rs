@@ -115,9 +115,11 @@ where
     pub inject_event: Vec<(PeerId, ConnectionId, <<TInner::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent)>,
     pub inject_addr_reach_failure: Vec<(Option<PeerId>, Multiaddr)>,
     pub inject_dial_failure: Vec<PeerId>,
-    pub inject_new_listen_addr: Vec<Multiaddr>,
+    pub inject_new_listener: Vec<ListenerId>,
+    pub inject_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
     pub inject_new_external_addr: Vec<Multiaddr>,
-    pub inject_expired_listen_addr: Vec<Multiaddr>,
+    pub inject_expired_listen_addr: Vec<(ListenerId, Multiaddr)>,
+    pub inject_expired_external_addr: Vec<Multiaddr>,
     pub inject_listener_error: Vec<ListenerId>,
     pub inject_listener_closed: Vec<(ListenerId, bool)>,
     pub poll: usize,
@@ -138,9 +140,11 @@ where
             inject_event: Vec::new(),
             inject_addr_reach_failure: Vec::new(),
             inject_dial_failure: Vec::new(),
+            inject_new_listener: Vec::new(),
             inject_new_listen_addr: Vec::new(),
             inject_new_external_addr: Vec::new(),
             inject_expired_listen_addr: Vec::new(),
+            inject_expired_external_addr: Vec::new(),
             inject_listener_error: Vec::new(),
             inject_listener_closed: Vec::new(),
             poll: 0,
@@ -217,19 +221,29 @@ where
         self.inner.inject_dial_failure(p);
     }
 
-    fn inject_new_listen_addr(&mut self, a: &Multiaddr) {
-        self.inject_new_listen_addr.push(a.clone());
-        self.inner.inject_new_listen_addr(a);
+    fn inject_new_listener(&mut self, id: ListenerId) {
+        self.inject_new_listener.push(id);
+        self.inner.inject_new_listener(id);
     }
 
-    fn inject_expired_listen_addr(&mut self, a: &Multiaddr) {
-        self.inject_expired_listen_addr.push(a.clone());
-        self.inner.inject_expired_listen_addr(a);
+    fn inject_new_listen_addr(&mut self, id: ListenerId, a: &Multiaddr) {
+        self.inject_new_listen_addr.push((id, a.clone()));
+        self.inner.inject_new_listen_addr(id, a);
+    }
+
+    fn inject_expired_listen_addr(&mut self, id: ListenerId, a: &Multiaddr) {
+        self.inject_expired_listen_addr.push((id, a.clone()));
+        self.inner.inject_expired_listen_addr(id, a);
     }
 
     fn inject_new_external_addr(&mut self, a: &Multiaddr) {
         self.inject_new_external_addr.push(a.clone());
         self.inner.inject_new_external_addr(a);
+    }
+
+    fn inject_expired_external_addr(&mut self, a: &Multiaddr) {
+        self.inject_expired_external_addr.push(a.clone());
+        self.inner.inject_expired_external_addr(a);
     }
 
     fn inject_listener_error(&mut self, l: ListenerId, e: &(dyn std::error::Error + 'static)) {

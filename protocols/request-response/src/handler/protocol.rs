@@ -101,16 +101,25 @@ where
         async move {
             let read = self.codec.read_request(&protocol, &mut io);
             let request = read.await?;
-            if let Ok(()) = self.request_sender.send((self.request_id, request)) {
-                if let Ok(response) = self.response_receiver.await {
-                    let write = self.codec.write_response(&protocol, &mut io, response);
-                    write.await?;
-                } else {
-                    return Ok(false)
-                }
+            match self.request_sender.send((self.request_id, request)) {
+                Ok(()) => {},
+                Err(_) => panic!(
+                    "Expect request receiver to be alive i.e. protocol handler to be alive.",
+                ),
             }
-            io.close().await?;
-            Ok(true)
+
+            if let Ok(response) = self.response_receiver.await {
+                let write = self.codec.write_response(&protocol, &mut io, response);
+                write.await?;
+
+                io.close().await?;
+                // Response was sent. Indicate to handler to emit a `ResponseSent` event.
+                Ok(true)
+            } else {
+                io.close().await?;
+                // No response was sent. Indicate to handler to emit a `ResponseOmission` event.
+                Ok(false)
+            }
         }.boxed()
     }
 }

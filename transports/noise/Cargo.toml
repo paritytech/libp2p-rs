@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-noise"
 description = "Cryptographic handshake protocol using the noise framework."
-version = "0.29.0"
+version = "0.30.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,7 @@ bytes = "1"
 curve25519-dalek = "3.0.0"
 futures = "0.3.1"
 lazy_static = "1.2"
-libp2p-core = { version = "0.27.0", path = "../../core" }
+libp2p-core = { version = "0.28.0", path = "../../core" }
 log = "0.4"
 prost = "0.7"
 rand = "0.7.2"

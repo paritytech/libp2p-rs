@@ -18,12 +18,25 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{RemoteInfo, IdentifyProtocolConfig, ReplySubstream};
+use crate::protocol::{
+    IdentifyProtocol,
+    IdentifyPushProtocol,
+    IdentifyInfo,
+    InboundPush,
+    OutboundPush,
+    ReplySubstream
+};
 use futures::prelude::*;
+use libp2p_core::either::{
+    EitherError,
+    EitherOutput,
+};
 use libp2p_core::upgrade::{
+    EitherUpgrade,
     InboundUpgrade,
     OutboundUpgrade,
-    ReadOneError
+    SelectUpgrade,
+    UpgradeError,
 };
 use libp2p_swarm::{
     NegotiatedSubstream,
@@ -34,15 +47,8 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr
 };
 use smallvec::SmallVec;
-use std::{pin::Pin, task::Context, task::Poll, time::Duration};
+use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::Delay;
-
-/// Delay between the moment we connect and the first time we identify.
-const DELAY_TO_FIRST_ID: Duration = Duration::from_millis(500);
-/// After an identification succeeded, wait this long before the next time.
-const DELAY_TO_NEXT_ID: Duration = Duration::from_secs(5 * 60);
-/// After we failed to identify the remote, try again after the given delay.
-const TRY_AGAIN_ON_ERR: Duration = Duration::from_secs(60 * 60);
 
 /// Protocol handler for sending and receiving identification requests.
 ///
@@ -50,73 +56,110 @@ const TRY_AGAIN_ON_ERR: Duration = Duration::from_secs(60 * 60);
 /// at least one identification request to be answered by the remote before
 /// permitting the underlying connection to be closed.
 pub struct IdentifyHandler {
-    /// Configuration for the protocol.
-    config: IdentifyProtocolConfig,
-
     /// Pending events to yield.
-    events: SmallVec<[IdentifyHandlerEvent; 4]>,
+    events: SmallVec<[ProtocolsHandlerEvent<
+            EitherUpgrade<IdentifyProtocol, IdentifyPushProtocol<OutboundPush>>,
+            (),
+            IdentifyHandlerEvent,
+            io::Error,
+    >; 4]>,
 
     /// Future that fires when we need to identify the node again.
     next_id: Delay,
 
     /// Whether the handler should keep the connection alive.
     keep_alive: KeepAlive,
+
+    /// The interval of `next_id`, i.e. the recurrent delay.
+    interval: Duration,
 }
 
 /// Event produced by the `IdentifyHandler`.
 #[derive(Debug)]
 pub enum IdentifyHandlerEvent {
-    /// We obtained identification information from the remote
-    Identified(RemoteInfo),
+    /// We obtained identification information from the remote.
+    Identified(IdentifyInfo),
     /// We received a request for identification.
     Identify(ReplySubstream<NegotiatedSubstream>),
     /// Failed to identify the remote.
-    IdentificationError(ProtocolsHandlerUpgrErr<ReadOneError>),
+    IdentificationError(ProtocolsHandlerUpgrErr<io::Error>),
 }
+
+/// Identifying information of the local node that is pushed to a remote.
+#[derive(Debug)]
+pub struct IdentifyPush(pub IdentifyInfo);
 
 impl IdentifyHandler {
     /// Creates a new `IdentifyHandler`.
-    pub fn new() -> Self {
+    pub fn new(initial_delay: Duration, interval: Duration) -> Self {
         IdentifyHandler {
-            config: IdentifyProtocolConfig,
             events: SmallVec::new(),
-            next_id: Delay::new(DELAY_TO_FIRST_ID),
+            next_id: Delay::new(initial_delay),
             keep_alive: KeepAlive::Yes,
+            interval,
         }
     }
 }
 
 impl ProtocolsHandler for IdentifyHandler {
-    type InEvent = ();
+    type InEvent = IdentifyPush;
     type OutEvent = IdentifyHandlerEvent;
-    type Error = ReadOneError;
-    type InboundProtocol = IdentifyProtocolConfig;
-    type OutboundProtocol = IdentifyProtocolConfig;
+    type Error = io::Error;
+    type InboundProtocol = SelectUpgrade<IdentifyProtocol, IdentifyPushProtocol<InboundPush>>;
+    type OutboundProtocol = EitherUpgrade<IdentifyProtocol, IdentifyPushProtocol<OutboundPush>>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(self.config.clone(), ())
+        SubstreamProtocol::new(
+            SelectUpgrade::new(
+                IdentifyProtocol,
+                IdentifyPushProtocol::inbound(),
+            ), ())
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _info: Self::InboundOpenInfo
+        output: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
+        _: Self::InboundOpenInfo
     ) {
-        self.events.push(IdentifyHandlerEvent::Identify(protocol))
+        match output {
+            EitherOutput::First(substream) => {
+                self.events.push(
+                    ProtocolsHandlerEvent::Custom(
+                        IdentifyHandlerEvent::Identify(substream)))
+            }
+            EitherOutput::Second(info) => {
+                self.events.push(
+                    ProtocolsHandlerEvent::Custom(
+                        IdentifyHandlerEvent::Identified(info)))
+            }
+        }
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _info: Self::OutboundOpenInfo,
+        output: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
+        _: Self::OutboundOpenInfo,
     ) {
-        self.events.push(IdentifyHandlerEvent::Identified(protocol));
-        self.keep_alive = KeepAlive::No;
+        match output {
+            EitherOutput::First(remote_info) => {
+                self.events.push(
+                    ProtocolsHandlerEvent::Custom(
+                        IdentifyHandlerEvent::Identified(remote_info)));
+                self.keep_alive = KeepAlive::No;
+            }
+            EitherOutput::Second(()) => {}
+        }
     }
 
-    fn inject_event(&mut self, _: Self::InEvent) {}
+    fn inject_event(&mut self, IdentifyPush(push): Self::InEvent) {
+        self.events.push(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            protocol: SubstreamProtocol::new(
+                EitherUpgrade::B(
+                    IdentifyPushProtocol::outbound(push)), ())
+        });
+    }
 
     fn inject_dial_upgrade_error(
         &mut self,
@@ -125,9 +168,16 @@ impl ProtocolsHandler for IdentifyHandler {
             <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error
         >
     ) {
-        self.events.push(IdentifyHandlerEvent::IdentificationError(err));
+        let err = err.map_upgrade_err(|e| match e {
+            UpgradeError::Select(e) => UpgradeError::Select(e),
+            UpgradeError::Apply(EitherError::A(ioe)) => UpgradeError::Apply(ioe),
+            UpgradeError::Apply(EitherError::B(ioe)) => UpgradeError::Apply(ioe),
+        });
+        self.events.push(
+            ProtocolsHandlerEvent::Custom(
+                IdentifyHandlerEvent::IdentificationError(err)));
         self.keep_alive = KeepAlive::No;
-        self.next_id.reset(TRY_AGAIN_ON_ERR);
+        self.next_id.reset(self.interval);
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -143,18 +193,18 @@ impl ProtocolsHandler for IdentifyHandler {
         >,
     > {
         if !self.events.is_empty() {
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(
+            return Poll::Ready(
                 self.events.remove(0),
-            ));
+            );
         }
 
         // Poll the future that fires when we need to identify the node again.
         match Future::poll(Pin::new(&mut self.next_id), cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => {
-                self.next_id.reset(DELAY_TO_NEXT_ID);
+                self.next_id.reset(self.interval);
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(self.config.clone(), ())
+                    protocol: SubstreamProtocol::new(EitherUpgrade::A(IdentifyProtocol), ())
                 };
                 Poll::Ready(ev)
             }

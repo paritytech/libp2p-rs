@@ -56,17 +56,12 @@ where
     I::Item: AsRef<[u8]>
 {
     let iter = protocols.into_iter();
-    // NOTE: Temporarily disabled "parallel" negotiation in order to correct the
-    // "ls" responses towards interoperability and (new) spec compliance.
-    // See https://github.com/libp2p/rust-libp2p/issues/1795.
-    Either::Left(dialer_select_proto_serial(inner, iter, version))
-
     // We choose between the "serial" and "parallel" strategies based on the number of protocols.
-    // if iter.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
-    //    Either::Left(dialer_select_proto_serial(inner, iter, version))
-    // } else {
-    //     Either::Right(dialer_select_proto_parallel(inner, iter, version))
-    // }
+    if iter.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
+       Either::Left(dialer_select_proto_serial(inner, iter, version))
+    } else {
+        Either::Right(dialer_select_proto_parallel(inner, iter, version))
+    }
 }
 
 /// Future, returned by `dialer_select_proto`, which selects a protocol and dialer
@@ -265,7 +260,7 @@ where
                             let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
                             *this.state = SeqState::SendProtocol { io, protocol }
                         }
-                        _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into())),
+                        _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
                     }
                 }
 

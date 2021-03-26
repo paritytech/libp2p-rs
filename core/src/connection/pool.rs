@@ -182,13 +182,13 @@ where
             },
             PoolEvent::ConnectionEvent { ref connection, ref event } => {
                 f.debug_struct("PoolEvent::ConnectionEvent")
-                    .field("peer", connection.peer_id())
+                    .field("peer", &connection.peer_id())
                     .field("event", event)
                     .finish()
             },
             PoolEvent::AddressChange { ref connection, ref new_endpoint, ref old_endpoint } => {
                 f.debug_struct("PoolEvent::AddressChange")
-                    .field("peer", connection.peer_id())
+                    .field("peer", &connection.peer_id())
                     .field("new_endpoint", new_endpoint)
                     .field("old_endpoint", old_endpoint)
                     .finish()
@@ -325,8 +325,8 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         // "established" connection.
         let future = future.and_then({
             let endpoint = endpoint.clone();
-            let expected_peer = peer.clone();
-            let local_id = self.local_id.clone();
+            let expected_peer = peer;
+            let local_id = self.local_id;
             move |(peer_id, muxer)| {
                 if let Some(peer) = expected_peer {
                     if peer != peer_id {
@@ -376,7 +376,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
         self.counters.check_max_established_per_peer(self.num_peer_established(&i.peer_id))?;
         let id = self.manager.add(c, i.clone());
         self.counters.inc_established(&i.endpoint);
-        self.established.entry(i.peer_id.clone()).or_default().insert(id, i.endpoint);
+        self.established.entry(i.peer_id).or_default().insert(id, i.endpoint);
         Ok(id)
     }
 
@@ -554,7 +554,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
 
     /// Returns an iterator over all connected peers, i.e. those that have
     /// at least one established connection in the pool.
-    pub fn iter_connected<'a>(&'a self) -> impl Iterator<Item = &'a PeerId> + 'a {
+    pub fn iter_connected(&self) -> impl Iterator<Item = &PeerId> {
         self.established.keys()
     }
 
@@ -667,7 +667,7 @@ impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr>
                         }
 
                         // Add the connection to the pool.
-                        let peer = entry.connected().peer_id.clone();
+                        let peer = entry.connected().peer_id;
                         let conns = self.established.entry(peer).or_default();
                         let num_established = NonZeroU32::new(u32::try_from(conns.len() + 1).unwrap())
                             .expect("n + 1 is always non-zero; qed");
@@ -786,8 +786,8 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     }
 
     /// Returns the identity of the connected peer.
-    pub fn peer_id(&self) -> &PeerId {
-        &self.entry.connected().peer_id
+    pub fn peer_id(&self) -> PeerId {
+        self.entry.connected().peer_id
     }
 
     /// Returns the local connection ID.
@@ -842,6 +842,7 @@ where
     I: Iterator<Item = ConnectionId>
 {
     /// Obtains the next connection, if any.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<EstablishedConnection<'_, TInEvent>>
     {
         while let Some(id) = self.ids.next() {

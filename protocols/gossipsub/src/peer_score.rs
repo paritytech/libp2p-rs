@@ -432,7 +432,7 @@ impl PeerScore {
     /// Adds a new ip to a peer, if the peer is not yet known creates a new peer_stats entry for it
     pub fn add_ip(&mut self, peer_id: &PeerId, ip: IpAddr) {
         trace!("Add ip for peer {}, ip: {}", peer_id, ip);
-        let peer_stats = self.peer_stats.entry(peer_id.clone()).or_default();
+        let peer_stats = self.peer_stats.entry(*peer_id).or_default();
 
         // Mark the peer as connected (currently the default is connected, but we don't want to
         // rely on the default).
@@ -443,7 +443,7 @@ impl PeerScore {
         self.peer_ips
             .entry(ip)
             .or_insert_with(HashSet::new)
-            .insert(peer_id.clone());
+            .insert(*peer_id);
     }
 
     /// Removes an ip from a peer
@@ -474,7 +474,7 @@ impl PeerScore {
     pub fn remove_peer(&mut self, peer_id: &PeerId) {
         // we only retain non-positive scores of peers
         if self.score(peer_id) > 0f64 {
-            if let hash_map::Entry::Occupied(entry) = self.peer_stats.entry(peer_id.clone()) {
+            if let hash_map::Entry::Occupied(entry) = self.peer_stats.entry(*peer_id) {
                 Self::remove_ips_for_peer(entry.get(), &mut self.peer_ips, peer_id);
                 entry.remove();
             }
@@ -692,11 +692,11 @@ impl PeerScore {
             DeliveryStatus::Unknown => {
                 // the message is being validated; track the peer delivery and wait for
                 // the Deliver/Reject notification.
-                record.peers.insert(from.clone());
+                record.peers.insert(*from);
             }
             DeliveryStatus::Valid(validated) => {
                 // mark the peer delivery time to only count a duplicate delivery once.
-                record.peers.insert(from.clone());
+                record.peers.insert(*from);
                 self.mark_duplicate_message_delivery(from, topic_hash, Some(validated));
             }
             DeliveryStatus::Invalid => {

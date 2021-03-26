@@ -224,15 +224,11 @@ impl PutRecordJob {
         }
 
         if let PeriodicJobState::Running(records) = &mut self.inner.state {
-            loop {
-                if let Some(r) = records.next() {
-                    if r.is_expired(now) {
-                        store.remove(&r.key)
-                    } else {
-                        return Poll::Ready(r)
-                    }
+            for r in records {
+                if r.is_expired(now) {
+                    store.remove(&r.key)
                 } else {
-                    break
+                    return Poll::Ready(r)
                 }
             }
 
@@ -301,15 +297,11 @@ impl AddProviderJob {
         }
 
         if let PeriodicJobState::Running(keys) = &mut self.inner.state {
-            loop {
-                if let Some(r) = keys.next() {
-                    if r.is_expired(now) {
-                        store.remove_provider(&r.key, &r.provider)
-                    } else {
-                        return Poll::Ready(r)
-                    }
+            for r in keys {
+                if r.is_expired(now) {
+                    store.remove_provider(&r.key, &r.provider)
                 } else {
-                    break
+                    return Poll::Ready(r)
                 }
             }
 

@@ -110,7 +110,7 @@ impl MessageCache {
                     let count = iwant_counts
                         .entry(message_id.clone())
                         .or_default()
-                        .entry(peer.clone())
+                        .entry(*peer)
                         .or_default();
                     *count += 1;
                     *count

@@ -251,7 +251,7 @@ where
         } else if let Some(info) = self.offline_peer_info.get_mut(p) {
             info.recv_budget.limit.set(limit)
         }
-        self.limit_overrides.insert(p.clone(), Limit::new(limit));
+        self.limit_overrides.insert(*p, Limit::new(limit));
     }
 
     /// Remove any limit overrides for the given peer.
@@ -286,7 +286,7 @@ where
                 let mut info = PeerInfo::new(limit);
                 info.send_budget.remaining -= 1;
                 let remaining = info.send_budget.remaining;
-                self.offline_peer_info.put(p.clone(), info);
+                self.offline_peer_info.put(*p, info);
                 remaining
             };
 
@@ -428,13 +428,13 @@ where
         if !self.peer_info.contains_key(p) {
             if let Some(info) = self.offline_peer_info.pop(p) {
                 let recv_budget = info.recv_budget.remaining;
-                self.peer_info.insert(p.clone(), info);
+                self.peer_info.insert(*p, info);
                 if recv_budget > 1 {
                     self.send_credit(p, recv_budget - 1);
                 }
             } else {
                 let limit = self.limit_overrides.get(p).copied().unwrap_or(self.default_limit);
-                self.peer_info.insert(p.clone(), PeerInfo::new(limit));
+                self.peer_info.insert(*p, PeerInfo::new(limit));
             }
         }
     }
@@ -442,7 +442,7 @@ where
     fn inject_disconnected(&mut self, p: &PeerId) {
         log::trace!("{:08x}: disconnected from {}", self.id, p);
         if let Some(info) = self.peer_info.remove(p) {
-            self.offline_peer_info.put(p.clone(), info.into_disconnected());
+            self.offline_peer_info.put(*p, info.into_disconnected());
         }
         self.behaviour.inject_disconnected(p)
     }
@@ -528,7 +528,7 @@ where
                                         if info.send_budget.grant < Some(id) {
                                             if info.send_budget.remaining == 0 && credit > 0 {
                                                 log::trace!("{:08x}: sending to peer {} can resume", self.id, peer);
-                                                self.events.push_back(Event::ResumeSending(peer.clone()))
+                                                self.events.push_back(Event::ResumeSending(peer))
                                             }
                                             info.send_budget.remaining += credit;
                                             info.send_budget.grant = Some(id);
@@ -549,7 +549,7 @@ where
                                         };
                                         if info.recv_budget.remaining == 0 {
                                             log::debug!("{:08x}: peer {} exceeds its budget", self.id, peer);
-                                            self.events.push_back(Event::TooManyInboundRequests(peer.clone()));
+                                            self.events.push_back(Event::TooManyInboundRequests(peer));
                                             continue
                                         }
                                         info.recv_budget.remaining -= 1;

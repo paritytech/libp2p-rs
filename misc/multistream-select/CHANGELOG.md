@@ -1,3 +1,17 @@
+# 0.10.3 [2021-03-17]
+
+- Update dependencies.
+
+# 0.10.2 [2021-03-01]
+
+- Re-enable "parallel negotiation" if the dialer has 3 or more
+  alternative protocols.
+  [PR 1934](https://github.com/libp2p/rust-libp2p/pull/1934)
+
+# 0.10.1 [2021-02-15]
+
+- Update dependencies.
+
 # 0.10.0 [2021-01-12]
 
 - Update dependencies.

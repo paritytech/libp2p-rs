@@ -23,7 +23,6 @@ use super::{Provider, IfEvent, Incoming};
 use async_io_crate::Async;
 use futures::{
     future::{BoxFuture, FutureExt},
-    prelude::*,
 };
 use std::io;
 use std::task::{Poll, Context};
@@ -75,9 +74,9 @@ impl Provider for Tcp {
     }
 
     fn poll_interfaces(w: &mut Self::IfWatcher, cx: &mut Context<'_>) -> Poll<io::Result<IfEvent>> {
-        w.next().map_ok(|e| match e {
+        w.poll_unpin(cx).map_ok(|e| match e {
             if_watch::IfEvent::Up(a) => IfEvent::Up(a),
             if_watch::IfEvent::Down(a) => IfEvent::Down(a),
-        }).boxed().poll_unpin(cx)
+        })
     }
 }

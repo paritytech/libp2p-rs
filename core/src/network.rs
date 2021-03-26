@@ -144,11 +144,10 @@ where
         local_peer_id: PeerId,
         config: NetworkConfig,
     ) -> Self {
-        let pool_local_id = local_peer_id.clone();
         Network {
             local_peer_id,
             listeners: ListenersStream::new(transport),
-            pool: Pool::new(pool_local_id, config.manager_config, config.limits),
+            pool: Pool::new(local_peer_id, config.manager_config, config.limits),
             dialing: Default::default(),
         }
     }
@@ -188,7 +187,7 @@ where
     ///
     /// The translation is transport-specific. See [`Transport::address_translation`].
     pub fn address_translation<'a>(&'a self, observed_addr: &'a Multiaddr)
-        -> impl Iterator<Item = Multiaddr> + 'a
+        -> Vec<Multiaddr>
     where
         TMuxer: 'a,
         THandler: 'a,
@@ -202,7 +201,7 @@ where
         addrs.sort_unstable();
         addrs.dedup();
 
-        addrs.into_iter()
+        addrs
     }
 
     /// Returns the peer id of the local node.
@@ -210,13 +209,14 @@ where
         &self.local_peer_id
     }
 
-    /// Dials a multiaddress without expecting a particular remote peer ID.
+    /// Dials a [`Multiaddr`] that may or may not encapsulate a
+    /// specific expected remote peer ID.
     ///
     /// The given `handler` will be used to create the
     /// [`Connection`](crate::connection::Connection) upon success and the
     /// connection ID is returned.
     pub fn dial(&mut self, address: &Multiaddr, handler: THandler)
-        -> Result<ConnectionId, ConnectionLimit>
+        -> Result<ConnectionId, DialError>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -226,15 +226,32 @@ where
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
+        // If the address ultimately encapsulates an expected peer ID, dial that peer
+        // such that any mismatch is detected. We do not "pop off" the `P2p` protocol
+        // from the address, because it may be used by the `Transport`, i.e. `P2p`
+        // is a protocol component that can influence any transport, like `libp2p-dns`.
+        if let Some(multiaddr::Protocol::P2p(ma)) = address.iter().last() {
+            if let Ok(peer) = PeerId::try_from(ma) {
+                return self.dial_peer(DialingOpts {
+                    peer,
+                    address: address.clone(),
+                    handler,
+                    remaining: Vec::new(),
+                })
+            }
+        }
+
+        // The address does not specify an expected peer, so just try to dial it as-is,
+        // accepting any peer ID that the remote identifies as.
         let info = OutgoingInfo { address, peer_id: None };
         match self.transport().clone().dial(address.clone()) {
             Ok(f) => {
                 let f = f.map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
-                self.pool.add_outgoing(f, handler, info)
+                self.pool.add_outgoing(f, handler, info).map_err(DialError::ConnectionLimit)
             }
             Err(err) => {
                 let f = future::err(PendingConnectionError::Transport(err));
-                self.pool.add_outgoing(f, handler, info)
+                self.pool.add_outgoing(f, handler, info).map_err(DialError::ConnectionLimit)
             }
         }
     }
@@ -380,7 +397,7 @@ where
         let event = match self.pool.poll(cx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(PoolEvent::ConnectionEstablished { connection, num_established }) => {
-                if let hash_map::Entry::Occupied(mut e) = self.dialing.entry(connection.peer_id().clone()) {
+                if let hash_map::Entry::Occupied(mut e) = self.dialing.entry(connection.peer_id()) {
                     e.get_mut().retain(|s| s.current.0 != connection.id());
                     if e.get().is_empty() {
                         e.remove();
@@ -431,7 +448,7 @@ where
 
     /// Initiates a connection attempt to a known peer.
     fn dial_peer(&mut self, opts: DialingOpts<PeerId, THandler>)
-        -> Result<ConnectionId, ConnectionLimit>
+        -> Result<ConnectionId, DialError>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)>,
         TTrans::Dial: Send + 'static,
@@ -461,7 +478,7 @@ fn dial_peer_impl<TMuxer, TInEvent, TOutEvent, THandler, TTrans>(
         <THandler::Handler as ConnectionHandler>::Error>,
     dialing: &mut FnvHashMap<PeerId, SmallVec<[peer::DialingState; 10]>>,
     opts: DialingOpts<PeerId, THandler>
-) -> Result<ConnectionId, ConnectionLimit>
+) -> Result<ConnectionId, DialError>
 where
     THandler: IntoConnectionHandler + Send + 'static,
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
@@ -479,23 +496,28 @@ where
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,
 {
-    let result = match transport.dial(opts.address.clone()) {
+    // Ensure the address to dial encapsulates the `p2p` protocol for the
+    // targeted peer, so that the transport has a "fully qualified" address
+    // to work with.
+    let addr = p2p_addr(opts.peer, opts.address).map_err(DialError::InvalidAddress)?;
+
+    let result = match transport.dial(addr.clone()) {
         Ok(fut) => {
             let fut = fut.map_err(|e| PendingConnectionError::Transport(TransportError::Other(e)));
-            let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };
-            pool.add_outgoing(fut, opts.handler, info)
+            let info = OutgoingInfo { address: &addr, peer_id: Some(&opts.peer) };
+            pool.add_outgoing(fut, opts.handler, info).map_err(DialError::ConnectionLimit)
         },
         Err(err) => {
             let fut = future::err(PendingConnectionError::Transport(err));
-            let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };
-            pool.add_outgoing(fut, opts.handler, info)
+            let info = OutgoingInfo { address: &addr, peer_id: Some(&opts.peer) };
+            pool.add_outgoing(fut, opts.handler, info).map_err(DialError::ConnectionLimit)
         },
     };
 
     if let Ok(id) = &result {
         dialing.entry(opts.peer).or_default().push(
             peer::DialingState {
-                current: (*id, opts.address),
+                current: (*id, addr),
                 remaining: opts.remaining,
             },
         );
@@ -526,7 +548,7 @@ where
             if let Some(pos) = attempts.iter().position(|s| s.current.0 == id) {
                 let attempt = attempts.remove(pos);
                 let last = attempts.is_empty();
-                Some((peer.clone(), attempt, last))
+                Some((*peer, attempt, last))
             } else {
                 None
             }
@@ -545,7 +567,7 @@ where
                 if let Some(handler) = handler {
                     let next_attempt = attempt.remaining.remove(0);
                     let opts = DialingOpts {
-                        peer: peer_id.clone(),
+                        peer: peer_id,
                         handler,
                         address: next_attempt,
                         remaining: attempt.remaining
@@ -667,6 +689,37 @@ impl NetworkConfig {
         self.limits = limits;
         self
     }
+}
+
+/// Ensures a given `Multiaddr` is a `/p2p/...` address for the given peer.
+///
+/// If the given address is already a `p2p` address for the given peer,
+/// i.e. the last encapsulated protocol is `/p2p/<peer-id>`, this is a no-op.
+///
+/// If the given address is already a `p2p` address for a different peer
+/// than the one given, the given `Multiaddr` is returned as an `Err`.
+///
+/// If the given address is not yet a `p2p` address for the given peer,
+/// the `/p2p/<peer-id>` protocol is appended to the returned address.
+fn p2p_addr(peer: PeerId, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
+    if let Some(multiaddr::Protocol::P2p(hash)) = addr.iter().last() {
+        if &hash != peer.as_ref() {
+            return Err(addr)
+        }
+        Ok(addr)
+    } else {
+        Ok(addr.with(multiaddr::Protocol::P2p(peer.into())))
+    }
+}
+
+/// Possible (synchronous) errors when dialing a peer.
+#[derive(Clone, Debug)]
+pub enum DialError {
+    /// The dialing attempt is rejected because of a connection limit.
+    ConnectionLimit(ConnectionLimit),
+    /// The address being dialed is invalid, e.g. if it refers to a different
+    /// remote peer than the one being dialed.
+    InvalidAddress(Multiaddr),
 }
 
 #[cfg(test)]

@@ -33,7 +33,7 @@ use libp2p_core::{
     ConnectedPoint,
     PeerId,
     Multiaddr,
-    connection::ConnectionId,
+    connection::{ConnectionId, ListenerId},
     either::{EitherError, EitherOutput},
     upgrade::{DeniedUpgrade, EitherUpgrade}
 };
@@ -110,6 +110,12 @@ where
         }
     }
 
+    fn inject_address_change(&mut self, peer_id: &PeerId, connection: &ConnectionId, old: &ConnectedPoint, new: &ConnectedPoint) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_address_change(peer_id, connection, old, new)
+        }
+    }
+
     fn inject_event(
         &mut self,
         peer_id: PeerId,
@@ -133,21 +139,45 @@ where
         }
     }
 
-    fn inject_new_listen_addr(&mut self, addr: &Multiaddr) {
+    fn inject_new_listener(&mut self, id: ListenerId) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_new_listen_addr(addr)
+            inner.inject_new_listener(id)
         }
     }
 
-    fn inject_expired_listen_addr(&mut self, addr: &Multiaddr) {
+    fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_expired_listen_addr(addr)
+            inner.inject_new_listen_addr(id, addr)
+        }
+    }
+
+    fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_expired_listen_addr(id, addr)
         }
     }
 
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
         if let Some(inner) = self.inner.as_mut() {
             inner.inject_new_external_addr(addr)
+        }
+    }
+
+    fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_expired_external_addr(addr)
+        }
+    }
+
+    fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_listener_error(id, err)
+        }
+    }
+
+    fn inject_listener_closed(&mut self, id: ListenerId, reason: Result<(), &std::io::Error>) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_listener_closed(id, reason)
         }
     }
 
@@ -241,7 +271,7 @@ where
                 .expect("Can't receive an inbound substream if disabled; QED")
                 .inject_fully_negotiated_inbound(out, info)
         } else {
-            panic!("Unpexpected Either::Right in enabled `inject_fully_negotiated_inbound`.")
+            panic!("Unexpected Either::Right in enabled `inject_fully_negotiated_inbound`.")
         }
     }
 

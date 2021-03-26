@@ -25,7 +25,7 @@ use libp2p_core::multiaddr::{multiaddr, Multiaddr};
 use libp2p_core::{
     PeerId,
     connection::PendingConnectionError,
-    network::{NetworkEvent, NetworkConfig, ConnectionLimits},
+    network::{NetworkEvent, NetworkConfig, ConnectionLimits, DialError},
 };
 use rand::Rng;
 use std::task::Poll;
@@ -47,12 +47,16 @@ fn max_outgoing() {
             .expect("Unexpected connection limit.");
     }
 
-    let err = network.peer(target.clone())
+    match network.peer(target.clone())
         .dial(Multiaddr::empty(), Vec::new(), TestHandler())
-        .expect_err("Unexpected dialing success.");
-
-    assert_eq!(err.current, outgoing_limit);
-    assert_eq!(err.limit, outgoing_limit);
+        .expect_err("Unexpected dialing success.")
+    {
+        DialError::ConnectionLimit(err) => {
+            assert_eq!(err.current, outgoing_limit);
+            assert_eq!(err.limit, outgoing_limit);
+        }
+        e => panic!("Unexpected error: {:?}", e),
+    }
 
     let info = network.info();
     assert_eq!(info.num_peers(), 0);

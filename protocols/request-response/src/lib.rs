@@ -163,7 +163,7 @@ pub enum RequestResponseEvent<TRequest, TResponse, TChannelResponse = TResponse>
 
 /// Possible failures occurring in the context of sending
 /// an outbound request and receiving the response.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OutboundFailure {
     /// The request could not be sent because a dialing attempt failed.
     DialFailure,
@@ -183,7 +183,7 @@ pub enum OutboundFailure {
 
 /// Possible failures occurring in the context of receiving an
 /// inbound request and sending a response.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InboundFailure {
     /// The inbound request timed out, either while reading the
     /// incoming request or before a response is sent, e.g. if
@@ -377,10 +377,10 @@ where
 
         if let Some(request) = self.try_send_request(peer, request) {
             self.pending_events.push_back(NetworkBehaviourAction::DialPeer {
-                peer_id: peer.clone(),
+                peer_id: *peer,
                 condition: DialPeerCondition::Disconnected,
             });
-            self.pending_outbound_requests.entry(peer.clone()).or_default().push(request);
+            self.pending_outbound_requests.entry(*peer).or_default().push(request);
         }
 
         request_id
@@ -409,7 +409,7 @@ where
     ///
     /// Addresses added in this way are only removed by `remove_address`.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
-        self.addresses.entry(peer.clone()).or_default().push(address);
+        self.addresses.entry(*peer).or_default().push(address);
     }
 
     /// Removes an address of a peer previously added via `add_address`.
@@ -479,7 +479,7 @@ where
             let conn = &mut connections[ix];
             conn.pending_inbound_responses.insert(request.request_id);
             self.pending_events.push_back(NetworkBehaviourAction::NotifyHandler {
-                peer_id: peer.clone(),
+                peer_id: *peer,
                 handler: NotifyHandler::One(conn.id),
                 event: request
             });
@@ -576,7 +576,7 @@ where
             ConnectedPoint::Dialer { address } => Some(address.clone()),
             ConnectedPoint::Listener { .. } => None
         };
-        self.connected.entry(peer.clone())
+        self.connected.entry(*peer)
             .or_default()
             .push(Connection::new(*conn, address));
     }
@@ -597,7 +597,7 @@ where
         for request_id in connection.pending_outbound_responses {
             self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
                 RequestResponseEvent::InboundFailure {
-                    peer: peer_id.clone(),
+                    peer: *peer_id,
                     request_id,
                     error: InboundFailure::ConnectionClosed
                 }
@@ -608,7 +608,7 @@ where
         for request_id in connection.pending_inbound_responses {
             self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
                 RequestResponseEvent::OutboundFailure {
-                    peer: peer_id.clone(),
+                    peer: *peer_id,
                     request_id,
                     error: OutboundFailure::ConnectionClosed
                 }
@@ -631,7 +631,7 @@ where
             for request in pending {
                 self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::OutboundFailure {
-                        peer: peer.clone(),
+                        peer: *peer,
                         request_id: request.request_id,
                         error: OutboundFailure::DialFailure
                     }
@@ -660,10 +660,10 @@ where
                         RequestResponseEvent::Message { peer, message }));
             }
             RequestResponseHandlerEvent::Request { request_id, request, sender } => {
-                let channel = ResponseChannel { request_id, peer: peer.clone(), sender };
+                let channel = ResponseChannel { request_id, peer, sender };
                 let message = RequestResponseMessage::Request { request_id, request, channel };
                 self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::Message { peer: peer.clone(), message }
+                    RequestResponseEvent::Message { peer, message }
                 ));
 
                 match self.get_connection_mut(&peer, connection) {
@@ -675,7 +675,7 @@ where
                     None => {
                         self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             RequestResponseEvent::InboundFailure {
-                                peer: peer.clone(),
+                                peer,
                                 request_id,
                                 error: InboundFailure::ConnectionClosed
                             }

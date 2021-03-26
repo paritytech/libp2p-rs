@@ -38,7 +38,7 @@ use libp2p::{
         either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
     },
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
-    identify::{Identify, IdentifyEvent},
+    identify::{Identify, IdentifyConfig, IdentifyEvent},
     identity,
     multiaddr::Protocol,
     noise,
@@ -245,11 +245,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 gossipsub_config,
             )
             .expect("Valid configuration"),
-            identify: Identify::new(
+            identify: Identify::new(IdentifyConfig::new(
                 "/ipfs/0.1.0".into(),
-                "rust-ipfs-example".into(),
                 local_key.public(),
-            ),
+            )),
             ping: Ping::new(PingConfig::new()),
         };
 
@@ -261,7 +260,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Reach out to other nodes if specified
     for to_dial in std::env::args().skip(1) {
         let addr: Multiaddr = parse_legacy_multiaddr(&to_dial)?;
-        Swarm::dial_addr(&mut swarm, addr)?;
+        swarm.dial_addr(addr)?;
         println!("Dialed {:?}", to_dial)
     }
 
@@ -269,7 +268,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
     let mut listening = false;
@@ -277,6 +276,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => swarm
+                    .behaviour_mut()
                     .gossipsub
                     .publish(gossipsub_topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),

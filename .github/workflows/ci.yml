@@ -13,20 +13,20 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.7.0
+      uses: styfle/cancel-workflow-action@0.8.0
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -47,7 +47,7 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.7.0
+      uses: styfle/cancel-workflow-action@0.8.0
       with:
         access_token: ${{ github.token }}
 
@@ -71,13 +71,13 @@ jobs:
       run: apt-get install -y cmake
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -95,7 +95,7 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.7.0
+      uses: styfle/cancel-workflow-action@0.8.0
       with:
         access_token: ${{ github.token }}
 
@@ -109,7 +109,7 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.7.0
+      uses: styfle/cancel-workflow-action@0.8.0
       with:
         access_token: ${{ github.token }}
 
@@ -123,13 +123,13 @@ jobs:
         components: clippy
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -138,14 +138,14 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: clippy
-        args: -- -A clippy::mutable_key_type -A clippy::type_complexity
+        args: -- -A clippy::type_complexity -A clippy::pedantic -A clippy::style
 
   run-benchmarks:
     runs-on: ubuntu-latest
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.7.0
+      uses: styfle/cancel-workflow-action@0.8.0
       with:
         access_token: ${{ github.token }}
 
@@ -158,13 +158,13 @@ jobs:
         override: true
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
@@ -183,20 +183,20 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.7.0
+      uses: styfle/cancel-workflow-action@0.8.0
       with:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v2
 
     - name: Cache CARGO_HOME
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: ~/.cargo
         key: cargo-home-${{ hashFiles('Cargo.toml') }}
 
     - name: Cache cargo build
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.4
       with:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}

@@ -2,7 +2,7 @@
 name = "libp2p-dns"
 edition = "2018"
 description = "DNS transport implementation for libp2p"
-version = "0.27.0"
+version = "0.28.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,6 +10,25 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.27.0", path = "../../core" }
+libp2p-core = { version = "0.28.1", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"
+trust-dns-resolver = { version = "0.20", default-features = false, features = ["system-config"] }
+async-std-resolver = { version = "0.20", optional = true }
+smallvec = "1.6.1"
+
+[dev-dependencies]
+env_logger = "0.6"
+tokio-crate = { package = "tokio", version = "1.0", default-features = false, features = ["rt", "time"] }
+async-std-crate = { package = "async-std", version = "1.6" }
+
+[features]
+default = ["async-std"]
+async-std = ["async-std-resolver"]
+tokio = ["trust-dns-resolver/tokio-runtime"]
+# The `tokio-` prefix and feature dependency is just to be explicit,
+# since these features of `trust-dns-resolver` are currently only
+# available for `tokio`.
+tokio-dns-over-rustls = ["tokio", "trust-dns-resolver/dns-over-rustls"]
+tokio-dns-over-https-rustls = ["tokio", "trust-dns-resolver/dns-over-https-rustls"]
+

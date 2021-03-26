@@ -56,6 +56,18 @@ fn push_pop_identity() {
     QuickCheck::new().quickcheck(prop as fn(Ma, Proto) -> bool)
 }
 
+#[test]
+fn ends_with() {
+    fn prop(Ma(m): Ma) {
+        let n = m.iter().count();
+        for i in 0 .. n {
+            let suffix = m.iter().skip(i).collect::<Multiaddr>();
+            assert!(m.ends_with(&suffix));
+        }
+    }
+    QuickCheck::new().quickcheck(prop as fn(_))
+}
+
 
 // Arbitrary impls
 

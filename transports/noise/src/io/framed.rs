@@ -27,7 +27,6 @@ use crate::io::NoiseOutput;
 use futures::ready;
 use futures::prelude::*;
 use log::{debug, trace};
-use snow;
 use std::{fmt, io, pin::Pin, task::{Context, Poll}};
 
 /// Max. size of a noise message.
@@ -261,9 +260,9 @@ where
                 WriteState::Ready => {
                     return Poll::Ready(Ok(()));
                 }
-                WriteState::WriteLen { len, mut buf, mut off } => {
+                WriteState::WriteLen { len, buf, mut off } => {
                     trace!("write: frame len ({}, {:?}, {}/2)", len, buf, off);
-                    match write_frame_len(&mut this.io, cx, &mut buf, &mut off) {
+                    match write_frame_len(&mut this.io, cx, &buf, &mut off) {
                         Poll::Ready(Ok(true)) => (),
                         Poll::Ready(Ok(false)) => {
                             trace!("write: eof");
@@ -324,12 +323,12 @@ where
                     buf: u16::to_be_bytes(n as u16),
                     off: 0
                 };
-                return Ok(())
+                Ok(())
             }
             Err(e) => {
                 log::error!("encryption error: {:?}", e);
                 this.write_state = WriteState::EncErr;
-                return Err(io::ErrorKind::InvalidData.into())
+                Err(io::ErrorKind::InvalidData.into())
             }
         }
     }

@@ -231,13 +231,11 @@ where
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        // Quick sanity check of the provided Multiaddr.
-        if let Some(Protocol::Ws(_)) | Some(Protocol::Wss(_)) = addr.iter().last() {
-            // ok
-        } else {
-            debug!("{} is not a websocket multiaddr", addr);
-            return Err(TransportError::MultiaddrNotSupported(addr))
-        }
+        let addr = match parse_ws_dial_addr(addr) {
+            Ok(addr) => addr,
+            Err(Error::InvalidMultiaddr(a)) => return Err(TransportError::MultiaddrNotSupported(a)),
+            Err(e) => return Err(TransportError::Other(e)),
+        };
 
         // We are looping here in order to follow redirects (if any):
         let mut remaining_redirects = self.max_redirects;
@@ -248,11 +246,11 @@ where
                 match this.dial_once(addr).await {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
-                            debug!("too many redirects");
+                            debug!("Too many redirects (> {})", self.max_redirects);
                             return Err(Error::TooManyRedirects)
                         }
                         remaining_redirects -= 1;
-                        addr = location_to_multiaddr(&redirect)?
+                        addr = parse_ws_dial_addr(location_to_multiaddr(&redirect)?)?
                     }
                     Ok(Either::Right(conn)) => return Ok(conn),
                     Err(e) => return Err(e)
@@ -273,46 +271,26 @@ where
     T: Transport,
     T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    /// Attempty to dial the given address and perform a websocket handshake.
-    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
-        trace!("dial address: {}", address);
+    /// Attempts to dial the given address and perform a websocket handshake.
+    async fn dial_once(self, addr: WsAddress) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
+        trace!("Dialing websocket address: {:?}", addr);
 
-        let (host_port, dns_name) = host_and_dnsname(&address)?;
-
-        let mut inner_addr = address.clone();
-
-        let (use_tls, path) =
-            match inner_addr.pop() {
-                Some(Protocol::Ws(path)) => (false, path),
-                Some(Protocol::Wss(path)) => {
-                    if dns_name.is_none() {
-                        debug!("no DNS name in {}", address);
-                        return Err(Error::InvalidMultiaddr(address))
-                    }
-                    (true, path)
-                }
-                _ => {
-                    debug!("{} is not a websocket multiaddr", address);
-                    return Err(Error::InvalidMultiaddr(address))
-                }
-            };
-
-        let dial = self.transport.dial(inner_addr)
+        let dial = self.transport.dial(addr.tcp_addr)
             .map_err(|e| match e {
                 TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),
                 TransportError::Other(e) => Error::Transport(e)
             })?;
 
         let stream = dial.map_err(Error::Transport).await?;
-        trace!("connected to {}", address);
+        trace!("TCP connection to {} established.", addr.host_port);
 
         let stream =
-            if use_tls { // begin TLS session
-                let dns_name = dns_name.expect("for use_tls we have checked that dns_name is some");
-                trace!("starting TLS handshake with {}", address);
+            if addr.use_tls { // begin TLS session
+                let dns_name = addr.dns_name.expect("for use_tls we have checked that dns_name is some");
+                trace!("Starting TLS handshake with {:?}", dns_name);
                 let stream = self.tls_config.client.connect(dns_name.as_ref(), stream)
                     .map_err(|e| {
-                        debug!("TLS handshake with {} failed: {}", address, e);
+                        debug!("TLS handshake with {:?} failed: {}", dns_name, e);
                         Error::Tls(tls::Error::from(e))
                     })
                     .await?;
@@ -323,9 +301,9 @@ where
                 EitherOutput::Second(stream)
             };
 
-        trace!("sending websocket handshake request to {}", address);
+        trace!("Sending websocket handshake to {}", addr.host_port);
 
-        let mut client = handshake::Client::new(stream, &host_port, path.as_ref());
+        let mut client = handshake::Client::new(stream, &addr.host_port, addr.path.as_ref());
 
         if self.use_deflate {
             client.add_extension(Box::new(Deflate::new(connection::Mode::Client)));
@@ -341,32 +319,87 @@ where
                 Err(Error::Handshake(msg.into()))
             }
             handshake::ServerResponse::Accepted { .. } => {
-                trace!("websocket handshake with {} successful", address);
+                trace!("websocket handshake with {} successful", addr.host_port);
                 Ok(Either::Right(Connection::new(client.into_builder())))
             }
         }
     }
 }
 
-// Extract host, port and optionally the DNS name from the given [`Multiaddr`].
-fn host_and_dnsname<T>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSName>), Error<T>> {
-    let mut iter = addr.iter();
-    match (iter.next(), iter.next()) {
-        (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) =>
-            Ok((format!("{}:{}", ip, port), None)),
-        (Some(Protocol::Ip6(ip)), Some(Protocol::Tcp(port))) =>
-            Ok((format!("{}:{}", ip, port), None)),
-        (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port))) =>
-            Ok((format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?.to_owned()))),
-        (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port))) =>
-            Ok((format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?.to_owned()))),
-        (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port))) =>
-            Ok((format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?.to_owned()))),
-        _ => {
-            debug!("multi-address format not supported: {}", addr);
-            Err(Error::InvalidMultiaddr(addr.clone()))
+#[derive(Debug)]
+struct WsAddress {
+    host_port: String,
+    path: String,
+    dns_name: Option<webpki::DNSName>,
+    use_tls: bool,
+    tcp_addr: Multiaddr,
+}
+
+/// Tries to parse the given `Multiaddr` into a `WsAddress` used
+/// for dialing.
+///
+/// Fails if the given `Multiaddr` does not represent a TCP/IP-based
+/// websocket protocol stack.
+fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
+    // The encapsulating protocol must be based on TCP/IP, possibly via DNS.
+    // We peek at it in order to learn the hostname and port to use for
+    // the websocket handshake.
+    let mut protocols = addr.iter();
+    let mut ip = protocols.next();
+    let mut tcp = protocols.next();
+    let (host_port, dns_name) = loop {
+        match (ip, tcp) {
+            (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port)))
+                => break (format!("{}:{}", ip, port), None),
+            (Some(Protocol::Ip6(ip)), Some(Protocol::Tcp(port)))
+                => break (format!("{}:{}", ip, port), None),
+            (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port))) |
+            (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port))) |
+            (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port))) |
+            (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port)))
+                => break (format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?.to_owned())),
+            (Some(_), Some(p)) => {
+                ip = Some(p);
+                tcp = protocols.next();
+            }
+            _ => return Err(Error::InvalidMultiaddr(addr))
         }
-    }
+    };
+
+    // Now consume the `Ws` / `Wss` protocol from the end of the address,
+    // preserving the trailing `P2p` protocol that identifies the remote,
+    // if any.
+    let mut protocols = addr.clone();
+    let mut p2p = None;
+    let (use_tls, path) = loop {
+        match protocols.pop() {
+            p@Some(Protocol::P2p(_)) => { p2p = p }
+            Some(Protocol::Ws(path)) => break (false, path.into_owned()),
+            Some(Protocol::Wss(path)) => {
+                if dns_name.is_none() {
+                    debug!("Missing DNS name in WSS address: {}", addr);
+                    return Err(Error::InvalidMultiaddr(addr))
+                }
+                break (true, path.into_owned())
+            }
+            _ => return Err(Error::InvalidMultiaddr(addr))
+        }
+    };
+
+    // The original address, stripped of the `/ws` and `/wss` protocols,
+    // makes up the the address for the inner TCP-based transport.
+    let tcp_addr = match p2p {
+        Some(p) => protocols.with(p),
+        None => protocols
+    };
+
+    Ok(WsAddress {
+        host_port,
+        dns_name,
+        path,
+        use_tls,
+        tcp_addr,
+    })
 }
 
 // Given a location URL, build a new websocket [`Multiaddr`].

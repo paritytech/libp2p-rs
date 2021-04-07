@@ -82,7 +82,7 @@ libp2p-streaming-response = { version = "0.1.0", path = "protocols/streaming-res
 libp2p-swarm = { version = "0.29.0", path = "swarm" }
 libp2p-swarm-derive = { version = "0.22.0", path = "swarm-derive" }
 libp2p-uds = { version = "0.28.0", path = "transports/uds", optional = true }
-libp2p-wasm-ext = { version = "0.28.0", path = "transports/wasm-ext", default-features = false, optional = true }
+libp2p-wasm-ext = { version = "0.28.1", path = "transports/wasm-ext", default-features = false, optional = true }
 libp2p-yamux = { version = "0.31.0", path = "muxers/yamux", optional = true }
 multiaddr = { package = "parity-multiaddr", version = "0.11.2", path = "misc/multiaddr" }
 parking_lot = "0.11.0"

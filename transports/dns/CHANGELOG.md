@@ -1,6 +1,10 @@
-# 0.28.1 [unreleased]
+# 0.28.1 [2021-04-01]
 
 - Update dependencies.
+
+- Remove `fqdn` function optimization conflicting with non fully qualified
+  domain name resolution [PR
+  2027](https://github.com/libp2p/rust-libp2p/pull/2027).
 
 # 0.28.0 [2021-03-17]
 

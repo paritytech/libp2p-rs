@@ -45,7 +45,7 @@ use libp2p_core::{
     transport::{TransportError, ListenerEvent}
 };
 use smallvec::SmallVec;
-use std::{borrow::Cow, convert::TryFrom, error, fmt, iter, net::IpAddr, str};
+use std::{convert::TryFrom, error, fmt, iter, net::IpAddr, str};
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 use std::io;
 #[cfg(any(feature = "async-std", feature = "tokio"))]
@@ -384,7 +384,7 @@ where
 {
     match proto {
         Protocol::Dns(ref name) => {
-            resolver.lookup_ip(fqdn(name)).map(move |res| match res {
+            resolver.lookup_ip(name.clone().into_owned()).map(move |res| match res {
                 Ok(ips) => {
                     let mut ips = ips.into_iter();
                     let one = ips.next()
@@ -403,7 +403,7 @@ where
             }).boxed()
         }
         Protocol::Dns4(ref name) => {
-            resolver.ipv4_lookup(fqdn(name)).map(move |res| match res {
+            resolver.ipv4_lookup(name.clone().into_owned()).map(move |res| match res {
                 Ok(ips) => {
                     let mut ips = ips.into_iter();
                     let one = ips.next()
@@ -423,7 +423,7 @@ where
             }).boxed()
         }
         Protocol::Dns6(ref name) => {
-            resolver.ipv6_lookup(fqdn(name)).map(move |res| match res {
+            resolver.ipv6_lookup(name.clone().into_owned()).map(move |res| match res {
                 Ok(ips) => {
                     let mut ips = ips.into_iter();
                     let one = ips.next()
@@ -443,8 +443,8 @@ where
             }).boxed()
         },
         Protocol::Dnsaddr(ref name) => {
-            let name = Cow::Owned([DNSADDR_PREFIX, name].concat());
-            resolver.txt_lookup(fqdn(&name)).map(move |res| match res {
+            let name = [DNSADDR_PREFIX, name].concat();
+            resolver.txt_lookup(name).map(move |res| match res {
                 Ok(txts) => {
                     let mut addrs = Vec::new();
                     for txt in txts {
@@ -480,14 +480,6 @@ fn parse_dnsaddr_txt(txt: &[u8]) -> io::Result<Multiaddr> {
 
 fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, e)
-}
-
-fn fqdn(name: &Cow<'_, str>) -> String {
-    if name.ends_with('.') {
-        name.to_string()
-    } else {
-        format!("{}.", name)
-    }
 }
 
 #[cfg(test)]

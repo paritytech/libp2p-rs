@@ -18,7 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A basic example demonstrating some core APIs and concepts of libp2p.
+//! Ping example
+//!
+//! See ../src/tutorial.rs for a step-by-step guide building the example below.
 //!
 //! In the first terminal window, run:
 //!
@@ -38,22 +40,20 @@
 //! The two nodes establish a connection, negotiate the ping protocol
 //! and begin pinging each other.
 
-use async_std::task;
-use futures::{future, prelude::*};
-use libp2p::{identity, PeerId, ping::{Ping, PingConfig}, Swarm};
-use std::{error::Error, task::{Context, Poll}};
+use futures::executor::block_on;
+use futures::prelude::*;
+use libp2p::ping::{Ping, PingConfig};
+use libp2p::swarm::Swarm;
+use libp2p::{identity, PeerId};
+use std::error::Error;
+use std::task::Poll;
 
-#[async_std::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+fn main() -> Result<(), Box<dyn Error>> {
+    let local_key = identity::Keypair::generate_ed25519();
+    let local_peer_id = PeerId::from(local_key.public());
+    println!("Local peer id: {:?}", local_peer_id);
 
-    // Create a random PeerId.
-    let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = PeerId::from(id_keys.public());
-    println!("Local peer id: {:?}", peer_id);
-
-    // Create a transport.
-    let transport = libp2p::development_transport(id_keys).await?;
+    let transport = block_on(libp2p::development_transport(local_key))?;
 
     // Create a ping network behaviour.
     //
@@ -62,9 +62,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // can be observed.
     let behaviour = Ping::new(PingConfig::new().with_keep_alive(true));
 
-    // Create a Swarm that establishes connections through the given transport
-    // and applies the ping behaviour on each connection.
-    let mut swarm = Swarm::new(transport, behaviour, peer_id);
+    let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+
+    // Tell the swarm to listen on all interfaces and a random, OS-assigned
+    // port.
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
@@ -74,24 +76,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         println!("Dialed {}", addr)
     }
 
-    // Tell the swarm to listen on all interfaces and a random, OS-assigned port.
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
-
     let mut listening = false;
-    task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
-        loop {
-            match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => println!("{:?}", event),
-                Poll::Ready(None) => return Poll::Ready(()),
-                Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Listening on {}", addr);
-                            listening = true;
-                        }
+    block_on(future::poll_fn(move |cx| loop {
+        match swarm.poll_next_unpin(cx) {
+            Poll::Ready(Some(event)) => println!("{:?}", event),
+            Poll::Ready(None) => return Poll::Ready(()),
+            Poll::Pending => {
+                if !listening {
+                    for addr in Swarm::listeners(&swarm) {
+                        println!("Listening on {}", addr);
+                        listening = true;
                     }
-                    return Poll::Pending
                 }
+                return Poll::Pending;
             }
         }
     }));

@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-wasm-ext"
-version = "0.28.0"
+version = "0.28.1"
 authors = ["Pierre Krieger <pierre.krieger1708@gmail.com>"]
 edition = "2018"
 description = "Allows passing in an external transport in a WASM environment"
@@ -11,7 +11,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.1"
-js-sys = "0.3.19"
+js-sys = "0.3.50"
 libp2p-core = { version = "0.28.0", path = "../../core" }
 parity-send-wrapper = "0.1.0"
 wasm-bindgen = "0.2.42"

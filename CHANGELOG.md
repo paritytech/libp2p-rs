@@ -54,6 +54,7 @@
     - `libp2p-relay`
     - `libp2p-request-response`
     - `libp2p-swarm`
+    - `libp2p-wasm-ext`
 
 ## Version 0.36.0 [2021-03-17]
 

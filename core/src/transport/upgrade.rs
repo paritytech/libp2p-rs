@@ -20,7 +20,7 @@
 
 //! Configuration of transport protocol upgrades.
 
-pub use crate::upgrade::Version;
+pub use crate::upgrade::{Version, SimOpenRole};
 
 use crate::{
     ConnectedPoint,
@@ -36,6 +36,7 @@ use crate::{
     muxing::{StreamMuxer, StreamMuxerBox},
     upgrade::{
         self,
+        AuthenticationUpgradeApply,
         OutboundUpgrade,
         InboundUpgrade,
         apply_inbound,
@@ -46,7 +47,7 @@ use crate::{
     },
     PeerId
 };
-use futures::{prelude::*, ready};
+use futures::{prelude::*, ready, future::Either};
 use multiaddr::Multiaddr;
 use std::{
     error::Error,
@@ -80,7 +81,6 @@ use std::{
 #[derive(Clone)]
 pub struct Builder<T> {
     inner: T,
-    version: upgrade::Version,
 }
 
 impl<T> Builder<T>
@@ -89,8 +89,8 @@ where
     T::Error: 'static,
 {
     /// Creates a `Builder` over the given (base) `Transport`.
-    pub fn new(inner: T, version: upgrade::Version) -> Builder<T> {
-        Builder { inner, version }
+    pub fn new(inner: T) -> Builder<T> {
+        Builder { inner }
     }
 
     /// Upgrades the transport to perform authentication of the remote.
@@ -115,12 +115,26 @@ where
         U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone,
         E: Error + 'static,
     {
-        let version = self.version;
+        self.authenticate_with_version(upgrade, upgrade::Version::default())
+    }
+
+    /// Same as [`Builder::authenticate`] with the option to choose the [`upgrade::Version`] used to
+    /// upgrade the connection.
+    pub fn authenticate_with_version<C, D, U, E>(self, upgrade: U, version: upgrade::Version) -> Authenticated<
+        AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate<C, U> + Clone>
+    > where
+        T: Transport<Output = C>,
+        C: AsyncRead + AsyncWrite + Unpin,
+        D: AsyncRead + AsyncWrite + Unpin,
+        U: InboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone,
+        E: Error + 'static,
+    {
         Authenticated(Builder::new(self.inner.and_then(move |conn, endpoint| {
             Authenticate {
-                inner: upgrade::apply(conn, upgrade, endpoint, version)
+                inner: upgrade::apply_authentication(conn, upgrade, endpoint, version)
             }
-        }), version))
+        })))
     }
 }
 
@@ -135,7 +149,7 @@ where
     U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>
 {
     #[pin]
-    inner: EitherUpgrade<C, U>
+    inner: AuthenticationUpgradeApply<C, U>
 }
 
 impl<C, U> Future for Authenticate<C, U>
@@ -146,7 +160,7 @@ where
         Error = <U as InboundUpgrade<Negotiated<C>>>::Error
     >
 {
-    type Output = <EitherUpgrade<C, U> as Future>::Output;
+    type Output = <AuthenticationUpgradeApply<C, U> as Future>::Output;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -207,16 +221,18 @@ where
     ///
     ///   * I/O upgrade: `C -> D`.
     ///   * Transport output: `(PeerId, C) -> (PeerId, D)`.
+    //
+    // TODO: Do we need an `apply` with a version?
     pub fn apply<C, D, U, E>(self, upgrade: U) -> Authenticated<Upgrade<T, U>>
     where
-        T: Transport<Output = (PeerId, C)>,
+        T: Transport<Output = ((PeerId, C), SimOpenRole)>,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
         U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
         U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
         E: Error + 'static,
     {
-        Authenticated(Builder::new(Upgrade::new(self.0.inner, upgrade), self.0.version))
+        Authenticated(Builder::new(Upgrade::new(self.0.inner, upgrade)))
     }
 
     /// Upgrades the transport with a (sub)stream multiplexer.
@@ -230,50 +246,32 @@ where
     ///   * I/O upgrade: `C -> M`.
     ///   * Transport output: `(PeerId, C) -> (PeerId, M)`.
     pub fn multiplex<C, M, U, E>(self, upgrade: U) -> Multiplexed<
-        AndThen<T, impl FnOnce((PeerId, C), ConnectedPoint) -> Multiplex<C, U> + Clone>
+        AndThen<T, impl FnOnce(((PeerId, C), SimOpenRole), ConnectedPoint) -> Multiplex<C, U> + Clone>
     > where
-        T: Transport<Output = (PeerId, C)>,
+        T: Transport<Output = ((PeerId, C), SimOpenRole)>,
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
         U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
         U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
         E: Error + 'static,
     {
-        let version = self.0.version;
-        Multiplexed(self.0.inner.and_then(move |(i, c), endpoint| {
-            let upgrade = upgrade::apply(c, upgrade, endpoint, version);
+        Multiplexed(self.0.inner.and_then(move |((i, c), r), endpoint| {
+            let upgrade = match r {
+                SimOpenRole::Initiator => {
+                    // TODO: Offer version that allows choosing the Version.
+                    Either::Left(upgrade::apply_outbound(c, upgrade, upgrade::Version::default()))
+                },
+                SimOpenRole::Responder => {
+                    Either::Right(upgrade::apply_inbound(c, upgrade))
+
+                }
+            };
             Multiplex { peer_id: Some(i), upgrade }
         }))
     }
 
-    /// Like [`Authenticated::multiplex`] but accepts a function which returns the upgrade.
-    ///
-    /// The supplied function is applied to [`PeerId`] and [`ConnectedPoint`]
-    /// and returns an upgrade which receives the I/O resource `C` and must
-    /// produce a [`StreamMuxer`] `M`. The transport must already be authenticated.
-    /// This ends the (regular) transport upgrade process.
-    ///
-    /// ## Transitions
-    ///
-    ///   * I/O upgrade: `C -> M`.
-    ///   * Transport output: `(PeerId, C) -> (PeerId, M)`.
-    pub fn multiplex_ext<C, M, U, E, F>(self, up: F) -> Multiplexed<
-        AndThen<T, impl FnOnce((PeerId, C), ConnectedPoint) -> Multiplex<C, U> + Clone>
-    > where
-        T: Transport<Output = (PeerId, C)>,
-        C: AsyncRead + AsyncWrite + Unpin,
-        M: StreamMuxer,
-        U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
-        E: Error + 'static,
-        F: for<'a> FnOnce(&'a PeerId, &'a ConnectedPoint) -> U + Clone
-    {
-        let version = self.0.version;
-        Multiplexed(self.0.inner.and_then(move |(peer_id, c), endpoint| {
-            let upgrade = upgrade::apply(c, up(&peer_id, &endpoint), endpoint, version);
-            Multiplex { peer_id: Some(peer_id), upgrade }
-        }))
-    }
+
+    // TODO: Add changelog entry that multiplex_ext is removed.
 }
 
 /// A authenticated and multiplexed transport, obtained from
@@ -341,7 +339,7 @@ where
 }
 
 /// An inbound or outbound upgrade.
-type EitherUpgrade<C, U> = future::Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>;
+type EitherUpgrade<C, U> = future::Either<OutboundUpgradeApply<C, U>, InboundUpgradeApply<C, U>>;
 
 /// A custom upgrade on an [`Authenticated`] transport.
 ///
@@ -357,14 +355,14 @@ impl<T, U> Upgrade<T, U> {
 
 impl<T, C, D, U, E> Transport for Upgrade<T, U>
 where
-    T: Transport<Output = (PeerId, C)>,
+    T: Transport<Output = ((PeerId, C), SimOpenRole)>,
     T::Error: 'static,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
     U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
     E: Error + 'static
 {
-    type Output = (PeerId, D);
+    type Output = ((PeerId, D), SimOpenRole);
     type Error = TransportUpgradeError<T::Error, E>;
     type Listener = ListenerStream<T::Listener, U>;
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
@@ -435,17 +433,17 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     future: Pin<Box<F>>,
-    upgrade: future::Either<Option<U>, (Option<PeerId>, OutboundUpgradeApply<C, U>)>
+    upgrade: future::Either<Option<U>, (Option<(PeerId, SimOpenRole)>, OutboundUpgradeApply<C, U>)>
 }
 
 impl<F, U, C, D> Future for DialUpgradeFuture<F, U, C>
 where
-    F: TryFuture<Ok = (PeerId, C)>,
+    F: TryFuture<Ok = ((PeerId, C), SimOpenRole)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundUpgrade<Negotiated<C>, Output = D>,
     U::Error: Error
 {
-    type Output = Result<(PeerId, D), TransportUpgradeError<F::Error, U::Error>>;
+    type Output = Result<((PeerId, D), SimOpenRole), TransportUpgradeError<F::Error, U::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
@@ -455,20 +453,20 @@ where
         loop {
             this.upgrade = match this.upgrade {
                 future::Either::Left(ref mut up) => {
-                    let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx).map_err(TransportUpgradeError::Transport)) {
+                    let ((i, c), r) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx).map_err(TransportUpgradeError::Transport)) {
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
                     let u = up.take().expect("DialUpgradeFuture is constructed with Either::Left(Some).");
-                    future::Either::Right((Some(i), apply_outbound(c, u, upgrade::Version::V1)))
+                    future::Either::Right((Some((i, r)), apply_outbound(c, u, upgrade::Version::V1)))
                 }
                 future::Either::Right((ref mut i, ref mut up)) => {
                     let d = match ready!(Future::poll(Pin::new(up), cx).map_err(TransportUpgradeError::Upgrade)) {
                         Ok(d) => d,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
-                    let i = i.take().expect("DialUpgradeFuture polled after completion.");
-                    return Poll::Ready(Ok((i, d)))
+                    let (i, r) = i.take().expect("DialUpgradeFuture polled after completion.");
+                    return Poll::Ready(Ok(((i, d), r)))
                 }
             }
         }
@@ -491,7 +489,7 @@ pub struct ListenerStream<S, U> {
 impl<S, U, F, C, D, E> Stream for ListenerStream<S, U>
 where
     S: TryStream<Ok = ListenerEvent<F, E>, Error = E>,
-    F: TryFuture<Ok = (PeerId, C)>,
+    F: TryFuture<Ok = ((PeerId, C), SimOpenRole)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = D> + Clone
 {
@@ -528,17 +526,17 @@ where
     U: InboundUpgrade<Negotiated<C>>
 {
     future: Pin<Box<F>>,
-    upgrade: future::Either<Option<U>, (Option<PeerId>, InboundUpgradeApply<C, U>)>
+    upgrade: future::Either<Option<U>, (Option<(PeerId, SimOpenRole)>, InboundUpgradeApply<C, U>)>
 }
 
 impl<F, U, C, D> Future for ListenerUpgradeFuture<F, U, C>
 where
-    F: TryFuture<Ok = (PeerId, C)>,
+    F: TryFuture<Ok = ((PeerId, C), SimOpenRole)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = D>,
     U::Error: Error
 {
-    type Output = Result<(PeerId, D), TransportUpgradeError<F::Error, U::Error>>;
+    type Output = Result<((PeerId, D), SimOpenRole), TransportUpgradeError<F::Error, U::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
@@ -548,20 +546,20 @@ where
         loop {
             this.upgrade = match this.upgrade {
                 future::Either::Left(ref mut up) => {
-                    let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx).map_err(TransportUpgradeError::Transport)) {
+                    let ((i, c), r) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx).map_err(TransportUpgradeError::Transport)) {
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err))
                     };
                     let u = up.take().expect("ListenerUpgradeFuture is constructed with Either::Left(Some).");
-                    future::Either::Right((Some(i), apply_inbound(c, u)))
+                    future::Either::Right((Some((i, r)), apply_inbound(c, u)))
                 }
                 future::Either::Right((ref mut i, ref mut up)) => {
                     let d = match ready!(TryFuture::try_poll(Pin::new(up), cx).map_err(TransportUpgradeError::Upgrade)) {
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err))
                     };
-                    let i = i.take().expect("ListenerUpgradeFuture polled after completion.");
-                    return Poll::Ready(Ok((i, d)))
+                    let (i, r) = i.take().expect("ListenerUpgradeFuture polled after completion.");
+                    return Poll::Ready(Ok(((i, d), r)))
                 }
             }
         }

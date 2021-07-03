@@ -387,7 +387,7 @@ fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
     let noise_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
     (peer_id, TcpConfig::new()
         .nodelay(true)
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed())

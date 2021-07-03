@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
+use crate::v1::message_proto::{circuit_relay, CircuitRelay};
+use crate::v1::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
+use crate::v1::Connection;
 use asynchronous_codec::{Framed, FramedParts};
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
@@ -68,7 +69,7 @@ impl upgrade::UpgradeInfo for OutgoingRelayReq {
 }
 
 impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq {
-    type Output = (super::Connection, oneshot::Receiver<()>);
+    type Output = (Connection, oneshot::Receiver<()>);
     type Error = OutgoingRelayReqError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -158,7 +159,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for OutgoingRelayReq {
 
             let (tx, rx) = oneshot::channel();
 
-            Ok((super::Connection::new(read_buffer.freeze(), io, tx), rx))
+            Ok((Connection::new(read_buffer.freeze(), io, tx), rx))
         }
         .boxed()
     }

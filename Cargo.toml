@@ -32,6 +32,7 @@ default = [
     "websocket",
     "yamux",
 ]
+dcutr = ["libp2p-dcutr"]
 deflate = ["libp2p-deflate"]
 dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
 dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
@@ -65,6 +66,7 @@ bytes = "1"
 futures = "0.3.1"
 lazy_static = "1.2"
 libp2p-core = { version = "0.29.0", path = "core",  default-features = false }
+libp2p-dcutr = { version = "0.1.0", path = "protocols/dcutr",  optional = true }
 libp2p-floodsub = { version = "0.30.0", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.32.0", path = "./protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.30.0", path = "protocols/identify", optional = true }
@@ -107,6 +109,7 @@ members = [
     "misc/peer-id-generator",
     "muxers/mplex",
     "muxers/yamux",
+    "protocols/dcutr",
     "protocols/floodsub",
     "protocols/gossipsub",
     "protocols/identify",

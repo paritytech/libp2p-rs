@@ -21,6 +21,7 @@ pin-project = "1"
 prost = "0.7"
 rand = "0.7"
 smallvec = "1.6.1"
+static_assertions = "1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
 wasm-timer = "0.2"

@@ -83,7 +83,7 @@ fn upgrade_pipeline() {
     let listener_id = listener_keys.public().into_peer_id();
     let listener_noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&listener_keys).unwrap();
     let listener_transport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::NoiseConfig::xx(listener_noise_keys).into_authenticated())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
@@ -99,7 +99,7 @@ fn upgrade_pipeline() {
     let dialer_id = dialer_keys.public().into_peer_id();
     let dialer_noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&dialer_keys).unwrap();
     let dialer_transport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::NoiseConfig::xx(dialer_noise_keys).into_authenticated())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
@@ -136,4 +136,3 @@ fn upgrade_pipeline() {
     async_std::task::spawn(server);
     async_std::task::block_on(client);
 }
-

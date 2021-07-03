@@ -32,7 +32,7 @@ pub fn test_network(cfg: NetworkConfig) -> TestNetwork {
     let local_public_key = local_key.public();
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&local_key).unwrap();
     let transport: TestTransport = tcp::TcpConfig::new()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();

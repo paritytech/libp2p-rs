@@ -464,7 +464,7 @@ mod tests {
         let pubkey = id_keys.public();
         let transport = TcpConfig::new()
             .nodelay(true)
-            .upgrade(upgrade::Version::V1)
+            .upgrade()
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(MplexConfig::new())
             .boxed();

@@ -42,6 +42,10 @@ pub use libp2p_core::multihash;
 
 #[doc(inline)]
 pub use libp2p_core as core;
+#[cfg(feature = "dcutr")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dcutr")))]
+#[doc(inline)]
+pub use libp2p_dcutr as dcutr;
 #[cfg(feature = "deflate")]
 #[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
@@ -175,7 +179,7 @@ pub async fn development_transport(keypair: identity::Keypair)
         .expect("Signing libp2p-noise static DH keypair failed.");
 
     Ok(transport
-        .upgrade(core::upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::YamuxConfig::default(), mplex::MplexConfig::default()))
         .timeout(std::time::Duration::from_secs(20))

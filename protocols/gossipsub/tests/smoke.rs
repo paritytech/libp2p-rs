@@ -146,7 +146,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
     let public_key = key.public();
 
     let transport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(PlainText2Config {
             local_public_key: public_key.clone(),
         })

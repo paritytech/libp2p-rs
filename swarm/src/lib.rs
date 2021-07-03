@@ -1186,7 +1186,7 @@ mod tests {
         let pubkey = id_keys.public();
         let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
         let transport = transport::MemoryTransport::default()
-            .upgrade(upgrade::Version::V1)
+            .upgrade()
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(libp2p_mplex::MplexConfig::new())
             .boxed();

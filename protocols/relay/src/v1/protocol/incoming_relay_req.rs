@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::copy_future::CopyFuture;
-use crate::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
-use crate::protocol::Peer;
+use crate::v1::copy_future::CopyFuture;
+use crate::v1::message_proto::{circuit_relay, circuit_relay::Status, CircuitRelay};
+use crate::v1::protocol::Peer;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::{BytesMut, Bytes};

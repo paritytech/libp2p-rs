@@ -44,6 +44,35 @@ where
     I: IntoIterator,
     I::Item: AsRef<[u8]>
 {
+    listener_select_proto_with_state(State::RecvHeader {
+        io: MessageIO::new(inner)
+    }, protocols)
+}
+
+pub(crate) fn listener_select_proto_no_header<R, I>(
+    io: MessageIO<R>,
+    protocols: I,
+) -> ListenerSelectFuture<R, I::Item>
+where
+    R: AsyncRead + AsyncWrite,
+    I: IntoIterator,
+    I::Item: AsRef<[u8]>
+{
+    listener_select_proto_with_state(
+        State::RecvMessage { io  },
+        protocols,
+    )
+}
+
+fn listener_select_proto_with_state<R, I>(
+    state: State<R, I::Item>,
+    protocols: I,
+) -> ListenerSelectFuture<R, I::Item>
+where
+    R: AsyncRead + AsyncWrite,
+    I: IntoIterator,
+    I::Item: AsRef<[u8]>
+{
     let protocols = protocols.into_iter().filter_map(|n|
         match Protocol::try_from(n.as_ref()) {
             Ok(p) => Some((n, p)),
@@ -55,9 +84,7 @@ where
         });
     ListenerSelectFuture {
         protocols: SmallVec::from_iter(protocols),
-        state: State::RecvHeader {
-            io: MessageIO::new(inner)
-        },
+        state,
         last_sent_na: false,
     }
 }

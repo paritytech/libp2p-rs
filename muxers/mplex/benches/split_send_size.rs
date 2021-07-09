@@ -148,7 +148,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
     mplex.set_split_send_size(split_send_size);
 
     libp2p_tcp::TcpConfig::new().nodelay(true)
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))
@@ -163,7 +163,7 @@ fn mem_transport(split_send_size: usize) -> BenchTransport {
     mplex.set_split_send_size(split_send_size);
 
     transport::MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))

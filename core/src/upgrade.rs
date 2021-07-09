@@ -70,9 +70,12 @@ mod transfer;
 use futures::future::Future;
 
 pub use crate::Negotiated;
-pub use multistream_select::{Version, NegotiatedComplete, NegotiationError, ProtocolError};
+pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Role};
 pub use self::{
-    apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
+    apply::{
+        apply, apply_authentication, apply_inbound, apply_outbound, InboundUpgradeApply,
+        OutboundUpgradeApply, AuthenticationUpgradeApply, Version, AuthenticationVersion,
+    },
     denied::DeniedUpgrade,
     either::EitherUpgrade,
     error::UpgradeError,
@@ -223,4 +226,3 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
 }
 
 impl<C, U: OutboundUpgrade<C>> OutboundUpgradeExt<C> for U {}
-

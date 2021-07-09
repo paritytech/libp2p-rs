@@ -199,7 +199,7 @@ fn mk_transport(muxer: MuxerChoice) -> (
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
     (peer_id, TcpConfig::new()
         .nodelay(true)
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(match muxer {
             MuxerChoice::Yamux =>

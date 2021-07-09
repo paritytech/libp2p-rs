@@ -66,8 +66,8 @@ use libp2p::relay::{Relay, RelayConfig};
 use libp2p::swarm::SwarmEvent;
 use libp2p::tcp::TcpConfig;
 use libp2p::Transport;
-use libp2p::{core::upgrade, identity::ed25519};
-use libp2p::{identity, NetworkBehaviour, PeerId, Swarm};
+use libp2p::identity::{self, ed25519};
+use libp2p::{NetworkBehaviour, PeerId, Swarm};
 use std::error::Error;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let transport = relay_wrapped_transport
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(plaintext)
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();

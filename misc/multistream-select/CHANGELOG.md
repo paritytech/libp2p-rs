@@ -1,3 +1,17 @@
+# 0.11.0 [unreleased]
+
+- Add support for [simultaneous open extension] via `Version::V1SimultaneousOpen`.
+
+  [`Role`] struct returned by `dialer_select_proto` `Future` can be ignored unless
+  `Version::V1SimultaneousOpen` is used.
+
+  This is one important component of the greater effort to support hole punching in rust-libp2p.
+
+  See [PR 2066].
+
+[simultaneous open extension]: https://github.com/libp2p/specs/blob/master/connections/simopen.md
+[PR 2066]: https://github.com/libp2p/rust-libp2p/pull/2066
+
 # 0.10.3 [2021-03-17]
 
 - Update dependencies.

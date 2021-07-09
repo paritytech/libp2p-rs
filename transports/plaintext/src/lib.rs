@@ -60,7 +60,7 @@ mod structs_proto {
 ///       io,
 ///       PlainText1Config{},
 ///       endpoint,
-///       libp2p_core::transport::upgrade::Version::V1,
+///       libp2p_core::upgrade::Version::V1,
 ///     )
 ///   })
 ///   .map(|plaintext, _endpoint| {

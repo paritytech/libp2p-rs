@@ -27,7 +27,7 @@ use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{self, Transport},
-    upgrade::{self, read_length_prefixed, write_length_prefixed}
+    upgrade::{read_length_prefixed, write_length_prefixed}
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
 use libp2p_request_response::*;
@@ -207,8 +207,8 @@ fn emits_inbound_connection_closed_failure() {
 
         loop {
             match swarm1.select_next_some().await {
-                SwarmEvent::Behaviour(RequestResponseEvent::InboundFailure { 
-                    error: InboundFailure::ConnectionClosed, 
+                SwarmEvent::Behaviour(RequestResponseEvent::InboundFailure {
+                    error: InboundFailure::ConnectionClosed,
                     ..
                 }) => break,
                 SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),
@@ -387,7 +387,7 @@ fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
     let noise_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
     (peer_id, TcpConfig::new()
         .nodelay(true)
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed())

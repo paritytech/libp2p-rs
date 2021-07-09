@@ -42,7 +42,6 @@ use libp2p::{
     NetworkBehaviour,
     PeerId,
     Transport,
-    core::upgrade,
     identity,
     floodsub::{self, Floodsub, FloodsubEvent},
     mdns::{Mdns, MdnsEvent},
@@ -73,7 +72,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a tokio-based TCP transport use noise for authenticated
     // encryption and Mplex for multiplexing of substreams on a TCP stream.
     let transport = TokioTcpConfig::new().nodelay(true)
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();

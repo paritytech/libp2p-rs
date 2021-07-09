@@ -40,11 +40,12 @@ use std::{io, task::{Context, Poll}};
 type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
 type TestNetwork = Network<TestTransport, (), (), TestHandler>;
 
-fn mk_transport(up: upgrade::Version) -> (PeerId, TestTransport) {
+// TODO: Fix _up
+fn mk_transport(_up: upgrade::Version) -> (PeerId, TestTransport) {
     let keys = identity::Keypair::generate_ed25519();
     let id = keys.public().into_peer_id();
     (id, MemoryTransport::default()
-        .upgrade(up)
+        .upgrade()
         .authenticate(PlainText2Config { local_public_key: keys.public() })
         .multiplex(MplexConfig::default())
         .boxed())

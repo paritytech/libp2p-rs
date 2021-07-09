@@ -47,7 +47,7 @@
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let dh_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
 //! let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-//! let builder = TcpConfig::new().upgrade(upgrade::Version::V1).authenticate(noise);
+//! let builder = TcpConfig::new().upgrade().authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
 //! ```
@@ -317,8 +317,9 @@ where
 /// See [`NoiseConfig::into_authenticated`].
 ///
 /// On success, the upgrade yields the [`PeerId`] obtained from the
-/// `RemoteIdentity`. The output of this upgrade is thus directly suitable
-/// for creating an [`authenticated`](libp2p_core::transport::upgrade::Authenticate)
+/// `RemoteIdentity`. The output of this upgrade is thus directly suitable for
+/// creating an
+/// [`authenticated`](libp2p_core::transport::upgrade::Builder::authenticate)
 /// transport for use with a [`Network`](libp2p_core::Network).
 #[derive(Clone)]
 pub struct NoiseAuthenticated<P, C: Zeroize, R> {

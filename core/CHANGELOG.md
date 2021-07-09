@@ -12,7 +12,43 @@
   Introduce `upgrade::read_length_prefixed` and `upgrade::write_length_prefixed`.
   See [PR 2111](https://github.com/libp2p/rust-libp2p/pull/2111).
 
+- Add support for multistream-select [simultaneous open extension] to assign _initiator_ and
+  _responder_ role during authentication protocol negotiation on simultaneously opened connection.
+
+  This is one important component of the greater effort to support hole punching in rust-libp2p.
+
+  - `Transport::upgrade` no longer takes a multistream-select `Version`. Instead the
+     multistream-select `Version`s `V1`, `V1Lazy` and `V1SimultaneousOpen` can be selected when
+     setting the authentication upgrade via `Builder::authenticate_with_version` and the
+     multistream-select `Version`s `V1` and `V1Lazy` can be selected when setting the multiplexing
+     upgrade via `Builder::multiplex_with_version`.
+
+     Users merely wanting to maintain the status quo should use the following call chain depending
+     on which `Version` they previously used:
+
+     - `Version::V1`
+
+       ```rust
+       my_transport.upgrade()
+         .authenticate(my_authentication)
+         .multiplex(my_multiplexer)
+       ```
+     - `Version::V1Lazy`
+
+       ```rust
+       my_transport.upgrade()
+         .authenticate_with_version(my_authentication, Version::V1Lazy)
+         .multiplex_with_version(my_multiplexer, Version::V1Lazy)
+       ```
+
+  - `Builder::multiplex_ext` is removed in favor of the new simultaneous open workflow. Please reach
+    out in case you depend on `Builder::multiplex_ext`.
+
+  See [PR 2066].
+
 [PR 2090]: https://github.com/libp2p/rust-libp2p/pull/2090
+[simultaneous open extension]: https://github.com/libp2p/specs/blob/master/connections/simopen.md
+[PR 2066]: https://github.com/libp2p/rust-libp2p/pull/2066
 
 # 0.28.3 [2021-04-26]
 

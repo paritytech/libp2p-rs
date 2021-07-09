@@ -38,7 +38,6 @@ use libp2p_core::{
     identity,
     transport::MemoryTransport,
     multiaddr::{Protocol, Multiaddr, multiaddr},
-    upgrade,
     multihash::{Code, Multihash, MultihashDigest},
 };
 use libp2p_noise as noise;
@@ -59,7 +58,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let local_public_key = local_key.public();
     let noise_keys = noise::Keypair::<noise::X25519>::new().into_authentic(&local_key).unwrap();
     let transport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(yamux::YamuxConfig::default())
         .boxed();

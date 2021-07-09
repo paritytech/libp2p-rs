@@ -46,7 +46,7 @@
 //! );
 //!
 //! let transport = relay_transport
-//!     .upgrade(upgrade::Version::V1)
+//!     .upgrade()
 //!     .authenticate(plaintext)
 //!     .multiplex(YamuxConfig::default())
 //!     .boxed();

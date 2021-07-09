@@ -451,7 +451,6 @@ mod tests {
         muxing::StreamMuxerBox,
         transport,
         Transport,
-        upgrade
     };
     use libp2p_noise as noise;
     use libp2p_tcp::TcpConfig;
@@ -464,7 +463,7 @@ mod tests {
         let pubkey = id_keys.public();
         let transport = TcpConfig::new()
             .nodelay(true)
-            .upgrade(upgrade::Version::V1)
+            .upgrade()
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(MplexConfig::new())
             .boxed();
@@ -517,8 +516,8 @@ mod tests {
                 pin_mut!(swarm2_fut);
 
                 match future::select(swarm1_fut, swarm2_fut).await.factor_second().0 {
-                    future::Either::Left(SwarmEvent::Behaviour(IdentifyEvent::Received { 
-                        info, 
+                    future::Either::Left(SwarmEvent::Behaviour(IdentifyEvent::Received {
+                        info,
                         ..
                     })) => {
                         assert_eq!(info.public_key, pubkey2);
@@ -528,8 +527,8 @@ mod tests {
                         assert!(info.listen_addrs.is_empty());
                         return;
                     }
-                    future::Either::Right(SwarmEvent::Behaviour(IdentifyEvent::Received { 
-                        info, 
+                    future::Either::Right(SwarmEvent::Behaviour(IdentifyEvent::Received {
+                        info,
                         ..
                     })) => {
                         assert_eq!(info.public_key, pubkey1);

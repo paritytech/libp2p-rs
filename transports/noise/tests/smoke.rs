@@ -36,7 +36,7 @@ fn core_upgrade_compat() {
     let id_keys = identity::Keypair::generate_ed25519();
     let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
     let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-    let _ = TcpConfig::new().upgrade(upgrade::Version::V1).authenticate(noise);
+    let _ = TcpConfig::new().upgrade().authenticate(noise);
 }
 
 #[test]

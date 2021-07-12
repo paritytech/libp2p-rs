@@ -23,6 +23,7 @@ rand = "0.8.3"
 smallvec = "1.6.1"
 socket2 = { version = "0.4.0", features = ["all"] }
 void = "1.0.2"
+wasm-timer = "0.2.4"
 
 [dev-dependencies]
 async-std = "1.9.0"

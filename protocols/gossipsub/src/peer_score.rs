@@ -27,7 +27,8 @@ use libp2p_core::PeerId;
 use log::{debug, trace, warn};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use wasm_timer::Instant;
 
 mod params;
 use crate::error::ValidationError;

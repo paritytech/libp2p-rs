@@ -77,7 +77,8 @@ pub use entry::*;
 use arrayvec::{self, ArrayVec};
 use bucket::KBucket;
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use wasm_timer::Instant;
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;

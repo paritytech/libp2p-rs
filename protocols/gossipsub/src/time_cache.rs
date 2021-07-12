@@ -26,7 +26,9 @@ use std::collections::hash_map::{
     Entry::{Occupied, Vacant},
 };
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use wasm_timer::Instant;
+
 
 struct ExpiringElement<Element> {
     /// The element that expires

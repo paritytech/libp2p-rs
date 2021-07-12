@@ -42,8 +42,9 @@ use std::{
     pin::Pin,
     task::Context,
     task::Poll,
-    time::{Duration, Instant},
+    time::Duration,
 };
+use wasm_timer::Instant;
 
 lazy_static! {
     static ref IPV4_MDNS_MULTICAST_ADDRESS: SocketAddr =

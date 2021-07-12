@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{circuit_relay, CircuitRelay};
-use crate::protocol::{Peer, MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
+use crate::v1::message_proto::{circuit_relay, CircuitRelay};
+use crate::v1::protocol::{MAX_ACCEPTED_MESSAGE_LEN, PROTOCOL_NAME};
+use crate::v1::protocol::Peer;
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::future::BoxFuture;
@@ -27,7 +28,7 @@ use futures::prelude::*;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use prost::Message;
-use std::{fmt, error, iter};
+use std::{error, fmt, iter};
 use unsigned_varint::codec::UviBytes;
 
 /// Ask the remote to become a destination. The upgrade succeeds if the remote accepts, and fails

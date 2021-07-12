@@ -1,4 +1,3 @@
-// Copyright 2019 Parity Technologies (UK) Ltd.
 // Copyright 2021 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -19,12 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! libp2p circuit relay implementations
+//! Implementation of the [libp2p circuit relay v2
+//! specification](https://github.com/libp2p/specs/issues/314).
 
-pub mod v1;
-pub mod v2;
+mod message_proto {
+    include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
+}
 
-// Check that we can safely cast a `usize` to a `u64`.
-static_assertions::const_assert! {
-    std::mem::size_of::<usize>() <= std::mem::size_of::<u64>()
+pub mod client;
+mod copy_future;
+mod protocol;
+pub mod relay;
+
+/// The ID of an outgoing / incoming, relay / destination request.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct RequestId(u64);
+
+impl RequestId {
+    fn new() -> RequestId {
+        RequestId(rand::random())
+    }
 }

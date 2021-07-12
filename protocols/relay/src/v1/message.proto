@@ -1,5 +1,5 @@
 syntax = "proto2";
-package message.pb;
+package message_v1.pb;
 
 message CircuitRelay {
 

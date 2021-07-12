@@ -34,7 +34,7 @@ use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p_kad::{GetClosestPeersOk, Kademlia, KademliaEvent, QueryResult};
 use libp2p_ping::{Ping, PingConfig, PingEvent};
 use libp2p_plaintext::PlainText2Config;
-use libp2p_relay::{Relay, RelayConfig};
+use libp2p_relay::v1::{new_transport_and_behaviour, Relay, RelayConfig};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
@@ -1258,7 +1258,7 @@ fn build_swarm(reachability: Reachability, relay_mode: RelayMode) -> Swarm<Combi
         Reachability::Routable => EitherTransport::Right(transport),
     };
 
-    let (transport, relay_behaviour) = libp2p_relay::new_transport_and_behaviour(
+    let (transport, relay_behaviour) = new_transport_and_behaviour(
         RelayConfig {
             actively_connect_to_dst_nodes: relay_mode.into(),
             ..Default::default()
@@ -1300,7 +1300,7 @@ fn build_keep_alive_swarm() -> Swarm<CombinedKeepAliveBehaviour> {
     let transport = MemoryTransport::default();
 
     let (transport, relay_behaviour) =
-        libp2p_relay::new_transport_and_behaviour(RelayConfig::default(), transport);
+        new_transport_and_behaviour(RelayConfig::default(), transport);
 
     let transport = transport
         .upgrade(upgrade::Version::V1)

@@ -18,4 +18,4 @@ flate2 = "1.0"
 async-std = "1.6.2"
 libp2p-tcp = { path = "../../transports/tcp" }
 quickcheck = "0.9"
-rand = "0.7"
+rand = "0.8"

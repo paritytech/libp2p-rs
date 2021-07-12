@@ -26,7 +26,7 @@ multistream-select = { version = "0.10", path = "../misc/multistream-select" }
 parking_lot = "0.11.0"
 pin-project = "1.0.0"
 prost = "0.8"
-rand = "0.7"
+rand = "0.8"
 rw-stream-sink = "0.2.0"
 sha2 = "0.9.1"
 smallvec = "1.6.1"

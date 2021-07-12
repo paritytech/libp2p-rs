@@ -14,7 +14,7 @@ futures = "0.3.1"
 libp2p-core = { version = "0.29.0", path = "../../core" }
 libp2p-swarm = { version = "0.30.0", path = "../../swarm" }
 log = "0.4.1"
-rand = "0.7.2"
+rand = "0.8.4"
 void = "1.0"
 wasm-timer = "0.2"
 

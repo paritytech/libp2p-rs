@@ -18,7 +18,7 @@ libp2p-swarm = { version = "0.30.0", path = "../../swarm" }
 log = "0.4.11"
 lru = "0.6"
 minicbor = { version = "0.8", features = ["std", "derive"] }
-rand = "0.7"
+rand = "0.8"
 smallvec = "1.6.1"
 unsigned-varint = { version = "0.7", features = ["std", "futures"] }
 wasm-timer = "0.2"
@@ -28,4 +28,4 @@ async-std = "1.6.2"
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-tcp = { path = "../../transports/tcp" }
 libp2p-yamux = { path = "../../muxers/yamux" }
-rand = "0.7"
+rand = "0.8"

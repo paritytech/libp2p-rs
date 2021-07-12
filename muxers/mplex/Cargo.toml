@@ -17,7 +17,7 @@ libp2p-core = { version = "0.29.0", path = "../../core" }
 log = "0.4"
 nohash-hasher = "0.2"
 parking_lot = "0.11"
-rand = "0.7"
+rand = "0.8"
 smallvec = "1.6.1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
@@ -29,7 +29,7 @@ futures = "0.3"
 libp2p-tcp = { path = "../../transports/tcp" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 quickcheck = "0.9"
-rand = "0.7"
+rand = "0.8"
 
 [[bench]]
 name = "split_send_size"

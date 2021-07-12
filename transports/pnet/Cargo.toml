@@ -14,7 +14,7 @@ futures = "0.3.1"
 log = "0.4.8"
 salsa20 = "0.8"
 sha3 = "0.9"
-rand = "0.7"
+rand = "0.8"
 pin-project = "1.0.2"
 
 [dev-dependencies]

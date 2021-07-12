@@ -401,6 +401,7 @@ fn src_try_connect_to_offline_dst() {
                     assert_eq!(peer_id, dst_peer_id);
                     break;
                 }
+                SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == relay_peer_id => {},
                 SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
                 e => panic!("{:?}", e),
             }
@@ -413,6 +414,8 @@ fn src_try_connect_to_unsupported_dst() {
     let _ = env_logger::try_init();
 
     let mut pool = LocalPool::new();
+
+    println!("===== 1");
 
     let mut src_swarm = build_swarm(Reachability::Firewalled, RelayMode::Passive);
     let mut relay_swarm = build_swarm(Reachability::Routable, RelayMode::Passive);
@@ -433,16 +436,24 @@ fn src_try_connect_to_unsupported_dst() {
     relay_swarm.listen_on(relay_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, relay_swarm);
 
+    println!("===== 2");
+
     dst_swarm.listen_on(dst_addr.clone()).unwrap();
     spawn_swarm_on_pool(&pool, dst_swarm);
 
+    println!("===== 3");
+
     src_swarm.dial_addr(dst_addr_via_relay.clone()).unwrap();
     pool.run_until(async move {
+        println!("===== 4");
+
         // Source Node dialing Relay to connect to Destination Node.
         match src_swarm.select_next_some().await {
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             e => panic!("{:?}", e),
         }
+
+        println!("===== 5");
 
         // Source Node establishing connection to Relay to connect to Destination Node.
         match src_swarm.select_next_some().await {
@@ -450,7 +461,11 @@ fn src_try_connect_to_unsupported_dst() {
             e => panic!("{:?}", e),
         }
 
+        println!("===== 6");
+
         loop {
+            println!("===== 7");
+
             match src_swarm.select_next_some().await {
                 SwarmEvent::UnreachableAddr { address, peer_id, .. }
                     if address == dst_addr_via_relay =>

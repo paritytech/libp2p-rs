@@ -25,7 +25,7 @@ pub mod framed;
 pub mod tls;
 
 use error::Error;
-use framed::Connection;
+use framed::{Connection, Incoming};
 use futures::{future::BoxFuture, prelude::*, stream::BoxStream, ready};
 use libp2p_core::{
     ConnectedPoint,
@@ -157,8 +157,8 @@ where
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(item) = ready!(self.0.try_poll_next_unpin(cx)?) {
-                if item.is_data() {
-                    return Poll::Ready(Some(Ok(item.into_bytes())))
+                if let Incoming::Data(payload) = item {
+                    return Poll::Ready(Some(Ok(payload.into_bytes())))
                 }
             } else {
                 return Poll::Ready(None)

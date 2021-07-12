@@ -29,7 +29,7 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError}
 };
 use log::{debug, trace};
-use soketto::{connection, extension::deflate::Deflate, handshake};
+use soketto::{connection::{self, CloseReason}, extension::deflate::Deflate, handshake};
 use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
@@ -442,55 +442,68 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 
 /// The websocket connection.
 pub struct Connection<T> {
-    receiver: BoxStream<'static, Result<IncomingData, connection::Error>>,
+    receiver: BoxStream<'static, Result<Incoming, connection::Error>>,
     sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
     _marker: std::marker::PhantomData<T>
 }
 
-/// Data received over the websocket connection.
+/// Data or control information received over the websocket connection.
 #[derive(Debug, Clone)]
-pub enum IncomingData {
-    /// Binary application data.
-    Binary(Vec<u8>),
-    /// UTF-8 encoded application data.
-    Text(Vec<u8>),
+pub enum Incoming {
+    /// Application data.
+    Data(Data),
     /// PONG control frame data.
-    Pong(Vec<u8>)
+    Pong(Vec<u8>),
+    /// Close reason.
+    Closed(CloseReason),
 }
 
-impl IncomingData {
+/// Application data received over the websocket connection
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Data {
+    /// UTF-8 encoded textual data.
+    Text(Vec<u8>),
+    /// Binary data.
+    Binary(Vec<u8>)
+}
+
+impl Data {
+    pub fn into_bytes(self) -> Vec<u8> {
+        match self {
+            Data::Text(d) => d,
+            Data::Binary(d) => d
+        }
+    }
+}
+
+impl AsRef<[u8]> for Data {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Data::Text(d) => d,
+            Data::Binary(d) => d
+        }
+    }
+}
+
+impl Incoming {
     pub fn is_data(&self) -> bool {
         self.is_binary() || self.is_text()
     }
 
     pub fn is_binary(&self) -> bool {
-        if let IncomingData::Binary(_) = self { true } else { false }
+        if let Incoming::Data(Data::Binary(_)) = self { true } else { false }
     }
 
     pub fn is_text(&self) -> bool {
-        if let IncomingData::Text(_) = self { true } else { false }
+        if let Incoming::Data(Data::Text(_)) = self { true } else { false }
     }
 
     pub fn is_pong(&self) -> bool {
-        if let IncomingData::Pong(_) = self { true } else { false }
+        if let Incoming::Pong(_) = self { true } else { false }
     }
 
-    pub fn into_bytes(self) -> Vec<u8> {
-        match self {
-            IncomingData::Binary(d) => d,
-            IncomingData::Text(d) => d,
-            IncomingData::Pong(d) => d
-        }
-    }
-}
-
-impl AsRef<[u8]> for IncomingData {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            IncomingData::Binary(d) => d,
-            IncomingData::Text(d) => d,
-            IncomingData::Pong(d) => d
-        }
+    pub fn is_close(&self) -> bool {
+        if let Incoming::Closed(_) = self { true } else { false }
     }
 }
 
@@ -543,15 +556,17 @@ where
         let stream = stream::unfold((Vec::new(), receiver), |(mut data, mut receiver)| async {
             match receiver.receive(&mut data).await {
                 Ok(soketto::Incoming::Data(soketto::Data::Text(_))) => {
-                    Some((Ok(IncomingData::Text(mem::take(&mut data))), (data, receiver)))
+                    Some((Ok(Incoming::Data(Data::Text(mem::take(&mut data)))), (data, receiver)))
                 }
                 Ok(soketto::Incoming::Data(soketto::Data::Binary(_))) => {
-                    Some((Ok(IncomingData::Binary(mem::take(&mut data))), (data, receiver)))
+                    Some((Ok(Incoming::Data(Data::Binary(mem::take(&mut data)))), (data, receiver)))
                 }
                 Ok(soketto::Incoming::Pong(pong)) => {
-                    Some((Ok(IncomingData::Pong(Vec::from(pong))), (data, receiver)))
+                    Some((Ok(Incoming::Pong(Vec::from(pong))), (data, receiver)))
                 }
-                Err(connection::Error::Closed) => None,
+                Ok(soketto::Incoming::Closed(reason)) => {
+                    Some((Ok(Incoming::Closed(reason)), (data, receiver)))
+                }
                 Err(e) => Some((Err(e), (data, receiver)))
             }
         });
@@ -582,7 +597,7 @@ impl<T> Stream for Connection<T>
 where
     T: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Item = io::Result<IncomingData>;
+    type Item = io::Result<Incoming>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let item = ready!(self.receiver.poll_next_unpin(cx));

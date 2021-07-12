@@ -1,0 +1,40 @@
+[package]
+name = "libp2p-rendezvous"
+edition = "2018"
+description = "Rendezvous protocol for libp2p"
+version = "0.1.0"
+authors = ["Comit Guys <hello@comit.network>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+asynchronous-codec = "0.6"
+libp2p-core = { version = "0.29.0", path = "../../core" }
+libp2p-swarm = { version = "0.30.0", path = "../../swarm" }
+prost = "0.7"
+void = "1"
+log = "0.4"
+futures = { version = "0.3", default-features = false, features = ["std"] }
+thiserror = "1"
+unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+uuid = { version = "0.8", features = ["v4"] }
+bimap = "0.6.1"
+sha2 = "0.9"
+rand = "0.8"
+wasm-timer = "0.2"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "0.8", features = ["wasm-bindgen"] }
+
+[dev-dependencies]
+libp2p = { path = "../.." }
+rand = "0.8"
+async-std = { version = "1", features = ["attributes"] }
+env_logger = "0.8"
+async-trait = "0.1"
+tokio = { version = "1", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] } # TODO: REMOVE FOR PRODUCTION USE
+
+[build-dependencies]
+prost-build = "0.7"

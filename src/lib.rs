@@ -125,6 +125,10 @@ pub use libp2p_relay as relay;
 #[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
 #[doc(inline)]
 pub use libp2p_request_response as request_response;
+#[cfg(feature = "rendezvous")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rendezvous")))]
+#[doc(inline)]
+pub use libp2p_rendezvous as rendezvous;
 
 mod transport_ext;
 

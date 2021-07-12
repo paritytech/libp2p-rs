@@ -116,7 +116,7 @@ where
     /// A connection may close if
     ///
     ///   * it encounters an error, which includes the connection being
-    ///     closed by the remote. In this case `error` is `Some`.
+    ///     closed by the remote. In this case `error` is `ome`.
     ///   * it was actively closed by [`EstablishedConnection::start_close`],
     ///     i.e. a successful, orderly close. In this case `error` is `None`.
     ///   * it was actively closed by [`super::peer::ConnectedPeer::disconnect`] or

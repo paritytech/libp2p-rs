@@ -1,4 +1,4 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
+// Copyright 2021 COMIT Network.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,6 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-fn main() {
-	prost_build::compile_protos(&["src/keys.proto", "src/envelope.proto", "src/peer_record.proto"], &["src"]).unwrap();
+use crate::codec;
+use crate::codec::Message;
+use void::Void;
+
+pub mod inbound;
+pub mod outbound;
+
+/// Errors that can occur while interacting with a substream.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Reading message {0:?} at this stage is a protocol violation")]
+    BadMessage(Message),
+    #[error("Failed to write message to substream")]
+    WriteMessage(#[source] codec::Error),
+    #[error("Failed to read message from substream")]
+    ReadMessage(#[source] codec::Error),
+    #[error("Substream ended unexpectedly mid-protocol")]
+    UnexpectedEndOfStream,
 }
+
+pub type InEvent = crate::substream_handler::InEvent<outbound::OpenInfo, inbound::InEvent, Void>;
+pub type OutEvent =
+    crate::substream_handler::OutEvent<inbound::OutEvent, outbound::OutEvent, Error, Error>;

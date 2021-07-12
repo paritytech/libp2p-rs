@@ -30,6 +30,7 @@ pub mod error;
 
 use self::error::*;
 use crate::{PeerId, keys_proto};
+use std::convert::{TryFrom, TryInto};
 
 /// Identity keypair of a node.
 ///
@@ -166,6 +167,7 @@ impl PublicKey {
     /// that the signature has been produced by the corresponding
     /// private key (authenticity), and that the message has not been
     /// tampered with (integrity).
+    #[must_use]
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         use PublicKey::*;
         match self {
@@ -182,7 +184,33 @@ impl PublicKey {
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
         use prost::Message;
 
-        let public_key = match self {
+        let public_key = keys_proto::PublicKey::from(self);
+
+        let mut buf = Vec::with_capacity(public_key.encoded_len());
+        public_key.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+        buf
+    }
+
+    /// Decode a public key from a protobuf structure, e.g. read from storage
+    /// or received from another node.
+    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
+        use prost::Message;
+
+        let pubkey = keys_proto::PublicKey::decode(bytes)
+            .map_err(|e| DecodingError::new("Protobuf").source(e))?;
+
+        pubkey.try_into()
+    }
+
+    /// Convert the `PublicKey` into the corresponding `PeerId`.
+    pub fn into_peer_id(self) -> PeerId {
+        self.into()
+    }
+}
+
+impl From<PublicKey> for keys_proto::PublicKey {
+    fn from(key: PublicKey) -> Self {
+        match key {
             PublicKey::Ed25519(key) =>
                 keys_proto::PublicKey {
                     r#type: keys_proto::KeyType::Ed25519 as i32,
@@ -200,22 +228,14 @@ impl PublicKey {
                     r#type: keys_proto::KeyType::Secp256k1 as i32,
                     data: key.encode().to_vec()
                 }
-        };
-
-        let mut buf = Vec::with_capacity(public_key.encoded_len());
-        public_key.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
-        buf
+        }
     }
+}
 
-    /// Decode a public key from a protobuf structure, e.g. read from storage
-    /// or received from another node.
-    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
-        use prost::Message;
+impl TryFrom<keys_proto::PublicKey> for PublicKey {
+    type Error = DecodingError;
 
-        #[allow(unused_mut)] // Due to conditional compilation.
-        let mut pubkey = keys_proto::PublicKey::decode(bytes)
-            .map_err(|e| DecodingError::new("Protobuf").source(e))?;
-
+    fn try_from(pubkey: keys_proto::PublicKey) -> Result<Self, Self::Error> {
         let key_type = keys_proto::KeyType::from_i32(pubkey.r#type)
             .ok_or_else(|| DecodingError::new(format!("unknown key type: {}", pubkey.r#type)))?;
 
@@ -242,11 +262,6 @@ impl PublicKey {
                 Err(DecodingError::new("Unsupported"))
             }
         }
-    }
-
-    /// Convert the `PublicKey` into the corresponding `PeerId`.
-    pub fn into_peer_id(self) -> PeerId {
-        self.into()
     }
 }
 

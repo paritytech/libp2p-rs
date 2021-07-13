@@ -29,7 +29,7 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError}
 };
 use log::{debug, trace};
-use soketto::{connection, extension::deflate::Deflate, handshake};
+use soketto::{connection::{self, CloseReason}, extension::deflate::Deflate, handshake};
 use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
@@ -455,7 +455,9 @@ pub enum IncomingData {
     /// UTF-8 encoded application data.
     Text(Vec<u8>),
     /// PONG control frame data.
-    Pong(Vec<u8>)
+    Pong(Vec<u8>),
+    /// Close reason.
+    Closed(CloseReason),
 }
 
 impl IncomingData {
@@ -475,11 +477,18 @@ impl IncomingData {
         if let IncomingData::Pong(_) = self { true } else { false }
     }
 
+    pub fn is_close(&self) -> bool {
+        if let IncomingData::Closed(_) = self { true } else { false }
+    }
+
     pub fn into_bytes(self) -> Vec<u8> {
         match self {
             IncomingData::Binary(d) => d,
             IncomingData::Text(d) => d,
-            IncomingData::Pong(d) => d
+            IncomingData::Pong(d) => d,
+            IncomingData::Closed(CloseReason { code, ..}) => {
+                code.to_be_bytes().to_vec()
+            }
         }
     }
 }
@@ -489,7 +498,8 @@ impl AsRef<[u8]> for IncomingData {
         match self {
             IncomingData::Binary(d) => d,
             IncomingData::Text(d) => d,
-            IncomingData::Pong(d) => d
+            IncomingData::Pong(d) => d,
+            IncomingData::Closed(_) => unimplemented!(),
         }
     }
 }
@@ -551,7 +561,9 @@ where
                 Ok(soketto::Incoming::Pong(pong)) => {
                     Some((Ok(IncomingData::Pong(Vec::from(pong))), (data, receiver)))
                 }
-                Err(connection::Error::Closed) => None,
+                Ok(soketto::Incoming::Closed(reason)) => {
+                    Some((Ok(IncomingData::Closed(reason)), (data, receiver)))
+                }
                 Err(e) => Some((Err(e), (data, receiver)))
             }
         });

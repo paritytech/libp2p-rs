@@ -16,6 +16,7 @@ log = "0.4"
 pin-project = "1.0.0"
 smallvec = "1.6.1"
 unsigned-varint = "0.7"
+arbitrary = { version = "1", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 async-std = "1.6.2"

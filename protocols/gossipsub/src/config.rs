@@ -20,6 +20,7 @@
 
 use std::borrow::Cow;
 use std::time::Duration;
+use std::sync::Arc;
 
 use libp2p_core::PeerId;
 
@@ -69,8 +70,8 @@ pub struct GossipsubConfig {
     duplicate_cache_time: Duration,
     validate_messages: bool,
     validation_mode: ValidationMode,
-    message_id_fn: fn(&GossipsubMessage) -> MessageId,
-    fast_message_id_fn: Option<fn(&RawGossipsubMessage) -> FastMessageId>,
+    message_id_fn: Arc<dyn Fn(&GossipsubMessage) -> MessageId + Send + Sync + 'static>,
+    fast_message_id_fn: Option<Arc<dyn Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static>>,
     allow_self_origin: bool,
     do_px: bool,
     prune_peers: usize,
@@ -234,6 +235,7 @@ impl GossipsubConfig {
     /// interpreted as the fast message id. Default is None.
     pub fn fast_message_id(&self, message: &RawGossipsubMessage) -> Option<FastMessageId> {
         self.fast_message_id_fn
+            .as_ref()
             .map(|fast_message_id_fn| fast_message_id_fn(message))
     }
 
@@ -396,7 +398,7 @@ impl Default for GossipsubConfigBuilder {
                 duplicate_cache_time: Duration::from_secs(60),
                 validate_messages: false,
                 validation_mode: ValidationMode::Strict,
-                message_id_fn: |message| {
+                message_id_fn: Arc::new(|message| {
                     // default message id is: source + sequence number
                     // NOTE: If either the peer_id or source is not provided, we set to 0;
                     let mut source_string = if let Some(peer_id) = message.source.as_ref() {
@@ -409,7 +411,7 @@ impl Default for GossipsubConfigBuilder {
                     source_string
                         .push_str(&message.sequence_number.unwrap_or_default().to_string());
                     MessageId::from(source_string)
-                },
+                }),
                 fast_message_id_fn: None,
                 allow_self_origin: false,
                 do_px: false,
@@ -574,8 +576,10 @@ impl GossipsubConfigBuilder {
     ///
     /// The function takes a [`GossipsubMessage`] as input and outputs a String to be
     /// interpreted as the message id.
-    pub fn message_id_fn(&mut self, id_fn: fn(&GossipsubMessage) -> MessageId) -> &mut Self {
-        self.config.message_id_fn = id_fn;
+    pub fn message_id_fn<F>(&mut self, id_fn: F) -> &mut Self
+    where F: Fn(&GossipsubMessage) -> MessageId + Send + Sync + 'static
+    {
+        self.config.message_id_fn = Arc::new(id_fn);
         self
     }
 
@@ -587,11 +591,13 @@ impl GossipsubConfigBuilder {
     ///
     /// The function takes a [`RawGossipsubMessage`] as input and outputs a String to be interpreted
     /// as the fast message id. Default is None.
-    pub fn fast_message_id_fn(
+    pub fn fast_message_id_fn<F>(
         &mut self,
-        fast_id_fn: fn(&RawGossipsubMessage) -> FastMessageId,
-    ) -> &mut Self {
-        self.config.fast_message_id_fn = Some(fast_id_fn);
+        fast_id_fn: F
+    ) -> &mut Self
+    where F: Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static,
+    {
+        self.config.fast_message_id_fn = Some(Arc::new(fast_id_fn));
         self
     }
 

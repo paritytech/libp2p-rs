@@ -68,6 +68,10 @@ pub use libp2p_floodsub as floodsub;
 #[cfg_attr(docsrs, doc(cfg(feature = "gossipsub")))]
 #[doc(inline)]
 pub use libp2p_gossipsub as gossipsub;
+#[cfg(feature = "metrics")]
+#[cfg_attr(docsrs, doc(cfg(feature = "metrics")))]
+#[doc(inline)]
+pub use libp2p_metrics as metrics;
 #[cfg(feature = "mplex")]
 #[cfg_attr(docsrs, doc(cfg(feature = "mplex")))]
 #[doc(inline)]

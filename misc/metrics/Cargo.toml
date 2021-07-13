@@ -1,0 +1,29 @@
+[package]
+name = "libp2p-metrics"
+edition = "2018"
+description = "Metrics for libp2p"
+version = "0.1.0"
+authors = ["Max Inden <mail@max-inden.de>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[features]
+identify = ["libp2p-identify"]
+kad = ["libp2p-kad"]
+ping = ["libp2p-ping"]
+
+[dependencies]
+libp2p-core=  { version = "0.29.0", path = "../../core" }
+libp2p-identify =  { version = "0.30.0", path = "../../protocols/identify", optional = true }
+libp2p-kad =  { version = "0.31.0", path = "../../protocols/kad", optional = true }
+libp2p-ping =  { version = "0.30.0", path = "../../protocols/ping", optional = true }
+libp2p-swarm =  { version = "0.30.0", path = "../../swarm" }
+open-metrics-client = "0.11.0"
+
+[dev-dependencies]
+env_logger = "0.8.1"
+futures = "0.3.1"
+libp2p = { path = "../../", features = ["metrics"] }
+tide = "0.16"

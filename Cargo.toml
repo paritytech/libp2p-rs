@@ -36,13 +36,14 @@ deflate = ["libp2p-deflate"]
 dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
 dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
 floodsub = ["libp2p-floodsub"]
-identify = ["libp2p-identify"]
-kad = ["libp2p-kad"]
+identify = ["libp2p-identify", "libp2p-metrics/identify"]
+kad = ["libp2p-kad", "libp2p-metrics/kad"]
 gossipsub = ["libp2p-gossipsub"]
+metrics = ["libp2p-metrics"]
 mdns = ["libp2p-mdns"]
 mplex = ["libp2p-mplex"]
 noise = ["libp2p-noise"]
-ping = ["libp2p-ping"]
+ping = ["libp2p-ping", "libp2p-metrics/ping"]
 plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
 relay = ["libp2p-relay"]
@@ -69,6 +70,7 @@ libp2p-floodsub = { version = "0.30.0", path = "protocols/floodsub", optional = 
 libp2p-gossipsub = { version = "0.32.0", path = "./protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.30.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.31.0", path = "protocols/kad", optional = true }
+libp2p-metrics = { version = "0.1.0", path = "misc/metrics", optional = true }
 libp2p-mplex = { version = "0.29.0", path = "muxers/mplex", optional = true }
 libp2p-noise = { version = "0.32.0", path = "transports/noise", optional = true }
 libp2p-ping = { version = "0.30.0", path = "protocols/ping", optional = true }
@@ -103,6 +105,7 @@ tokio = { version = "1.0.1", features = ["io-util", "io-std", "macros", "rt", "r
 resolver = "2"
 members = [
     "core",
+    "misc/metrics",
     "misc/multistream-select",
     "misc/peer-id-generator",
     "muxers/mplex",

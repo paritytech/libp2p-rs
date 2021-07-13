@@ -127,7 +127,7 @@ use libp2p_core::{
 use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
 use std::{error, fmt, io, pin::Pin, task::{Context, Poll}};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap, VecDeque};
 use std::num::{NonZeroU32, NonZeroUsize};
 use upgrade::UpgradeInfoSend as _;
 
@@ -268,6 +268,12 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
     /// [`UnreachableAddr`](SwarmEvent::UnreachableAddr) event is reported
     /// with `attempts_remaining` equal to 0.
     Dialing(PeerId),
+
+    /// Our address book was updated.
+    AddressBookUpdated {
+        peer_id: PeerId,
+        address: Multiaddr
+    }
 }
 
 /// Contains the state of the network, plus the way it should behave.
@@ -309,6 +315,9 @@ where
 
     /// The configured override for substream protocol upgrades, if any.
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
+
+    /// Addresses of peers that we've learned about so far.
+    address_book: AddressBook,
 }
 
 impl<TBehaviour, TInEvent, TOutEvent, THandler> Unpin for
@@ -375,9 +384,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         }
 
         let self_listening = &self.listened_addrs;
-        let mut addrs = self.behaviour.addresses_of_peer(peer_id)
-            .into_iter()
-            .filter(|a| !self_listening.contains(a));
+        let from_address_book = self.address_book.addresses_of_peer(peer_id);
+        let from_behaviour = self.behaviour.addresses_of_peer(peer_id);
+
+        let mut addrs = from_address_book
+            .chain(from_behaviour)
+            .filter(|address| !self_listening.contains(address));
 
         let result =
             if let Some(first) = addrs.next() {
@@ -741,8 +753,13 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
                                 peer_id, condition);
                             let self_listening = &this.listened_addrs;
+
+                            let from_address_book = this.address_book.addresses_of_peer(&peer_id);
+                            let from_behaviour = this.behaviour.addresses_of_peer(&peer_id);
+
+                            let addrs = from_address_book.chain(from_behaviour);
+
                             if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
-                                let addrs = this.behaviour.addresses_of_peer(peer.id());
                                 let mut attempt = peer.some_attempt();
                                 for a in addrs {
                                     if !self_listening.contains(&a) {
@@ -795,8 +812,35 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         }
                     }
                 },
+                Poll::Ready(NetworkBehaviourAction::ReportPeerAddr { peer_id, address }) => {
+                    this.address_book.add_entry(peer_id, address.clone());
+
+                    return Poll::Ready(SwarmEvent::AddressBookUpdated { peer_id, address })
+                },
             }
         }
+    }
+}
+
+/// Internal storage of addresses of other peers known to the [`Swarm`].
+#[derive(Debug, Default)]
+struct AddressBook {
+    inner: HashMap<PeerId, VecDeque<Multiaddr>>
+}
+
+impl AddressBook {
+    /// Adds an entry to the address book.
+    ///
+    /// Newly added entries are assumed to be more likely to be reachable and
+    /// are hence added to the front. This is in-line with the [`Swarm`]'s
+    /// expectation of trying to dial addresses in the order of their
+    /// likelihood to yield a connection.
+    fn add_entry(&mut self, peer: PeerId, address: Multiaddr) {
+        self.inner.entry(peer).or_default().push_front(address);
+    }
+
+    fn addresses_of_peer(&self, peer: &PeerId) -> impl Iterator<Item=Multiaddr> {
+        self.inner.get(peer).cloned().unwrap_or_default().into_iter()
     }
 }
 
@@ -1093,6 +1137,7 @@ where TBehaviour: NetworkBehaviour,
             banned_peers: HashSet::new(),
             pending_event: None,
             substream_upgrade_protocol_override: self.substream_upgrade_protocol_override,
+            address_book: AddressBook::default()
         }
     }
 }
@@ -1564,5 +1609,67 @@ mod tests {
                 }
             }
         }))
+    }
+
+    #[test]
+    fn reported_addresses_are_used_for_dialling() {
+        let mut swarm1 = new_test_swarm::<_, ()>(DummyProtocolsHandler {
+            keep_alive: KeepAlive::Yes
+        });
+        let mut swarm2 = new_test_swarm::<_, ()>(DummyProtocolsHandler {
+            keep_alive: KeepAlive::Yes
+        });
+        let swarm1_peer_id = *swarm1.local_peer_id();
+        let swarm2_peer_id = *swarm2.local_peer_id();
+        let listen_address = Multiaddr::empty().with(multiaddr::Protocol::Memory(rand::random()));
+
+        executor::block_on(async {
+            swarm1.listen_on(listen_address.clone()).unwrap();
+
+            loop {
+                if let SwarmEvent::NewListenAddr { .. } = swarm1.select_next_some().await {
+                    break
+                }
+            }
+        });
+        executor::block_on(async {
+            swarm2.behaviour.inner().next_action = Some(NetworkBehaviourAction::ReportPeerAddr {
+                peer_id: swarm1_peer_id,
+                address: listen_address
+            });
+            loop {
+                if let SwarmEvent::AddressBookUpdated { .. } = swarm2.select_next_some().await {
+                    break
+                }
+            }
+        });
+
+        swarm2.dial(&swarm1_peer_id).unwrap();
+
+        executor::block_on(async {
+            let mut swarm1_connected = false;
+            let mut swarm2_connected = false;
+
+            while !swarm1_connected || !swarm2_connected {
+                futures::select! {
+                    event = swarm1.select_next_some() => {
+                        match event {
+                            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == swarm2_peer_id => {
+                                swarm1_connected = true;
+                            }
+                            _ => {}
+                        }
+                    }
+                    event = swarm2.select_next_some() => {
+                        match event {
+                            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == swarm1_peer_id => {
+                                swarm2_connected = true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        })
     }
 }

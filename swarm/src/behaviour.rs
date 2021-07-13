@@ -294,6 +294,24 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         score: AddressScore,
     },
 
+    /// Informs the [`Swarm`] about an address observed for a particular peer.
+    ///
+    /// The address will be added to the [`Swarm`]s address book and will be
+    /// taken into account when a new connection needs to be established.
+    ///
+    /// [`Swarm`]: crate::Swarm
+    ReportPeerAddr {
+        /// The peer who's address we learned.
+        peer_id: PeerId,
+        /// The address where the peer is supposedly reachable.
+        address: Multiaddr,
+    },
+
+    // TODO: Include once peer records are merged
+    // ReportPeerRecord {
+    //
+    // },
+
     /// Instructs the `Swarm` to initiate a graceful close of one or all connections
     /// with the given peer.
     ///
@@ -331,7 +349,10 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
                 NetworkBehaviourAction::ReportObservedAddr { address, score },
             NetworkBehaviourAction::CloseConnection { peer_id, connection } =>
-                NetworkBehaviourAction::CloseConnection { peer_id, connection }
+                NetworkBehaviourAction::CloseConnection { peer_id, connection },
+            NetworkBehaviourAction::ReportPeerAddr { peer_id, address } => {
+                NetworkBehaviourAction::ReportPeerAddr { peer_id, address }
+            }
         }
     }
 
@@ -349,7 +370,10 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
             NetworkBehaviourAction::ReportObservedAddr { address, score } =>
                 NetworkBehaviourAction::ReportObservedAddr { address, score },
             NetworkBehaviourAction::CloseConnection { peer_id, connection } =>
-                NetworkBehaviourAction::CloseConnection { peer_id, connection }
+                NetworkBehaviourAction::CloseConnection { peer_id, connection },
+            NetworkBehaviourAction::ReportPeerAddr { peer_id, address } => {
+                NetworkBehaviourAction::ReportPeerAddr { peer_id, address }
+            }
         }
     }
 }

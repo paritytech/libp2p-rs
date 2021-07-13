@@ -3205,6 +3205,9 @@ where
                 NetworkBehaviourAction::CloseConnection { peer_id, connection } => {
                     NetworkBehaviourAction::CloseConnection { peer_id, connection }
                 }
+                NetworkBehaviourAction::ReportPeerAddr { peer_id, address } => {
+                    NetworkBehaviourAction::ReportPeerAddr { peer_id, address }
+                }
             });
         }
 

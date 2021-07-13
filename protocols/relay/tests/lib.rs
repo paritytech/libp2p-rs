@@ -615,6 +615,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                         break;
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                    SwarmEvent::AddressBookUpdated { .. } => {}
                     e => panic!("{:?}", e),
                 }
             }
@@ -626,6 +627,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                         break;
                     }
                     SwarmEvent::Behaviour(CombinedEvent::Ping(_)) => {}
+                    SwarmEvent::AddressBookUpdated { .. } => {}
                     e => panic!("{:?}", e),
                 }
             }
@@ -682,6 +684,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                     SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                         ..
                     })) => {}
+                    SwarmEvent::AddressBookUpdated { .. } => {}
                     e => panic!("{:?}", e),
                 }
             }
@@ -700,6 +703,7 @@ fn firewalled_src_discover_firewalled_dst_via_kad_and_connect_to_dst_via_routabl
                     SwarmEvent::Behaviour(CombinedEvent::Kad(KademliaEvent::RoutingUpdated {
                         ..
                     })) => {}
+                    SwarmEvent::AddressBookUpdated { .. } => {}
                     e => panic!("{:?}", e),
                 }
             }

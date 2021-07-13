@@ -255,6 +255,13 @@ impl NetworkBehaviour for Identify {
         match event {
             IdentifyHandlerEvent::Identified(info) => {
                 let observed = info.observed_addr.clone();
+                let listen_addresses = info.listen_addrs.clone();
+
+                self.events.extend(
+                    listen_addresses
+                            .into_iter()
+                            .map(|address| NetworkBehaviourAction::ReportPeerAddr { peer_id, address })
+                );
                 self.events.push_back(
                     NetworkBehaviourAction::GenerateEvent(
                         IdentifyEvent::Received {
